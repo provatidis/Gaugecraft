@@ -1,5 +1,7 @@
 # Gaugecraft
 
+[Open the dashboard](https://provatidis.com/gaugecraft/) · [Source repository](https://github.com/provatidis/gaugecraft)
+
 A read-only research workspace for Aero MetaDEX03 predictive allocation, available on GitHub Pages or locally. Compare pool rewards, inspect incentive expiry, model your share after dilution, and collect evidence about whether an APR persists.
 
 The first live run on October 22, 2026 retrieved **474 allocator pools across seven networks**. These are genuine contract observations. Historical coverage begins when your collector runs; the application does not manufacture earlier history. Counts and price coverage will change.

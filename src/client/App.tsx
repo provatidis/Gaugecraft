@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   CartesianGrid,
   Line,
@@ -26,6 +26,12 @@ import {
 } from "../analysis/math.js";
 import { get, assetUrl, exportUrl, hosted } from "./data.js";
 import { dataHealth, isFresh } from "../analysis/freshness.js";
+import {
+  ContextHelp,
+  GettingStarted,
+  Guide,
+  type ResearchPage,
+} from "./Guide.js";
 const money = (n: Maybe | undefined, compact = false) =>
   n == null
     ? "—"
@@ -104,7 +110,7 @@ const nav = [
   ["simulator", "⊞", "Simulator"],
   ["performance", "▥", "Performance"],
 ] as const;
-type Page = (typeof nav)[number][0];
+type Page = ResearchPage | "guide";
 function Badge({
   children,
   tone = "neutral",
@@ -152,6 +158,23 @@ export default function App() {
     [refresh, setRefresh] = useState(0),
     [selected, setSelected] = useState("");
   const [watch, setWatch] = useLocal<string[]>("gc-watchlist", []);
+  const [guideDismissed, setGuideDismissed] = useLocal<boolean>(
+    "gc-guide-dismissed",
+    false,
+  );
+  const heading = useRef<HTMLHeadingElement>(null);
+  const previousPage = useRef(page);
+  useEffect(() => {
+    if (previousPage.current !== page) {
+      heading.current?.focus({ preventScroll: true });
+      previousPage.current = page;
+    }
+  }, [page]);
+  function navigate(next: Page) {
+    setPage(next);
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }
+  const showGuide = () => navigate("guide");
   useEffect(() => {
     const abort = new AbortController();
     let alive = true;
@@ -201,8 +224,7 @@ export default function App() {
   const last = health.newest;
   function open(row: MarketRow, p: Page = "analysis") {
     setSelected(row.snapshot.id);
-    setPage(p);
-    window.scrollTo({ top: 0, behavior: "instant" });
+    navigate(p);
   }
   const stale = mode === "live" && health.stalePools > 0;
   const healthy =
@@ -219,7 +241,7 @@ export default function App() {
           href="#"
           onClick={(e) => {
             e.preventDefault();
-            setPage("markets");
+            navigate("markets");
           }}
         >
           <span className="brand-mark">
@@ -235,10 +257,7 @@ export default function App() {
             <button
               key={id}
               className={page === id ? "nav-item active" : "nav-item"}
-              onClick={() => {
-                setPage(id);
-                window.scrollTo({ top: 0, behavior: "instant" });
-              }}
+              onClick={() => navigate(id)}
               title={label}
               aria-current={page === id ? "page" : undefined}
             >
@@ -280,9 +299,20 @@ export default function App() {
         <header className="topbar">
           <div className="breadcrumb">
             Workspace <span>/</span>{" "}
-            <b>{nav.find((n) => n[0] === page)?.[2]}</b>
+            <b>
+              {page === "guide"
+                ? "How to use"
+                : nav.find((n) => n[0] === page)?.[2]}
+            </b>
           </div>
           <div className="top-actions">
+            <button
+              className="guide-button"
+              onClick={showGuide}
+              aria-current={page === "guide" ? "page" : undefined}
+            >
+              <span aria-hidden="true">?</span> How to use
+            </button>
             <span className="utc-date">
               {new Date().toLocaleDateString("en-GB", {
                 day: "2-digit",
@@ -338,27 +368,31 @@ export default function App() {
           <div className="page-heading">
             <div>
               <div className="eyebrow">AERO PREDICTIVE ALLOCATION</div>
-              <h1>
-                {page === "markets"
-                  ? "Allocation markets"
-                  : page === "opportunities"
-                    ? "Allocation opportunities"
-                    : page === "analysis"
-                      ? "Pool analysis"
-                      : page === "simulator"
-                        ? "Allocation simulator"
-                        : "Forecast performance"}
+              <h1 ref={heading} tabIndex={-1}>
+                {page === "guide"
+                  ? "How to use Gaugecraft"
+                  : page === "markets"
+                    ? "Allocation markets"
+                    : page === "opportunities"
+                      ? "Allocation opportunities"
+                      : page === "analysis"
+                        ? "Pool analysis"
+                        : page === "simulator"
+                          ? "Allocation simulator"
+                          : "Forecast performance"}
               </h1>
               <p>
-                {page === "markets"
-                  ? "Compare pool revenue, incentives and allocation pressure over the next 48 hours."
-                  : page === "opportunities"
-                    ? "Transparent signals, explicit stress tests, and no invented confidence scores."
-                    : page === "analysis"
-                      ? "A record of what was observable, with each estimate kept in context."
-                      : page === "simulator"
-                        ? "Test allocation dilution and incentive runway before you decide."
-                        : "Frozen forecasts, observed outcomes, and simple benchmarks."}
+                {page === "guide"
+                  ? "A short path from headline APR to an informed allocation scenario."
+                  : page === "markets"
+                    ? "Compare pool revenue, incentives and allocation pressure over the next 48 hours."
+                    : page === "opportunities"
+                      ? "Transparent signals, explicit stress tests, and no invented confidence scores."
+                      : page === "analysis"
+                        ? "A record of what was observable, with each estimate kept in context."
+                        : page === "simulator"
+                          ? "Test allocation dilution and incentive runway before you decide."
+                          : "Frozen forecasts, observed outcomes, and simple benchmarks."}
               </p>
             </div>
             {page === "markets" && (
@@ -411,7 +445,19 @@ export default function App() {
               {hosted ? "Scheduled snapshots" : "30 min collection"}
             </span>
           </div>
-          {loading && !state ? (
+          {page === "markets" && !guideDismissed && (
+            <GettingStarted
+              onGuide={showGuide}
+              onDismiss={() => {
+                setGuideDismissed(true);
+                heading.current?.focus({ preventScroll: true });
+              }}
+            />
+          )}
+          {page !== "guide" && <ContextHelp page={page} onGuide={showGuide} />}
+          {page === "guide" ? (
+            <Guide navigate={navigate} />
+          ) : loading && !state ? (
             <div className="loading">
               <div className="spinner" />
               Reading observations…
@@ -458,7 +504,7 @@ export default function App() {
                   select={setSelected}
                   mode={mode}
                   revision={revision}
-                  simulate={() => setPage("simulator")}
+                  simulate={() => navigate("simulator")}
                 />
               )}
               {page === "simulator" && current && (
@@ -688,7 +734,8 @@ function Markets({
               Markets <span className="count">{rows.length}</span>
             </h2>
             <p>
-              Pool totals first. Your individual earnings depend on your share.
+              Est. rewards 48h is the pool-wide total. Simulate your share for
+              personal earnings.
             </p>
           </div>
           <div className="legend">
@@ -1541,7 +1588,9 @@ function Simulator({
       <div className="simulator-layout">
         <section className="panel simulator-inputs">
           <h2>Your allocation</h2>
-          <p>Enter power manually. No wallet or address needed.</p>
+          <p>
+            Enter allocation power, not dollars. No wallet or address needed.
+          </p>
           {[
             [
               "power",

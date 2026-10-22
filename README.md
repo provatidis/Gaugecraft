@@ -10,6 +10,8 @@ The first live run on October 22, 2026 retrieved **474 allocator pools across se
 
 Use the app to move from **large pool rewards → sustainable revenue → your diluted share → an explicit 48-hour scenario**. A useful research session ends with an explanation of the opportunity and its weak points, rather than just an APR number.
 
+Open **How to use** in the app header for a concise research routine, direct links to all five sections and expandable explanations. The optional Markets introduction can be dismissed; the full guide remains available on desktop and mobile. Dismissal is stored only in this browser. Each research screen also has an expandable help prompt.
+
 To learn the controls, select **Sample fixtures** in the header. Every figure in that mode is synthetic. Switch back to **Live observations** before researching actual pools.
 
 ### A repeatable research routine

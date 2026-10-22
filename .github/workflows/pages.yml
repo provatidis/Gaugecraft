@@ -5,7 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
   schedule:
-    - cron: "7,37 * * * *"
+    # Editing cron also re-registers GitHub’s schedule trigger if delivery stalls.
+    - cron: "17 * * * *"
+    - cron: "47 * * * *"
 
 # Serialize database restoration, collection, backup and deployment. Never cancel a writer.
 concurrency:

@@ -1,0 +1,7 @@
+{
+  "retrievedAt": "2026-10-22",
+  "appVersion": "v0.0.1+8e0f27",
+  "url": "https://app.aero.xyz/assets/execution.worker-D_OV4Mdl.js",
+  "sha256": "a899c5dc283665504ec749670faae506950972fb32de76cc8524ce5752b6c895",
+  "note": "Only public addresses and read-only ABI declarations extracted as data. No bundled JavaScript or embedded provider credentials used."
+}

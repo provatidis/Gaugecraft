@@ -1,0 +1,44 @@
+{
+  "name": "gaugecraft",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env --import tsx server/index.ts",
+    "collect": "node --env-file-if-exists=.env --import tsx server/collect-cli.ts",
+    "collector": "node --env-file-if-exists=.env --import tsx server/collect-cli.ts --watch",
+    "demo": "node --env-file-if-exists=.env --import tsx server/demo.ts",
+    "export": "node --env-file-if-exists=.env --import tsx server/export.ts",
+    "test": "tsx --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "build": "tsc --noEmit && vite build",
+    "start": "node --env-file-if-exists=.env --import tsx server/index.ts --production",
+    "format": "prettier --write src server tests scripts config *.json *.ts *.js *.md index.html pnpm-workspace.yaml .github",
+    "format:check": "prettier --check src server tests scripts config *.json *.ts *.js *.md index.html pnpm-workspace.yaml .github",
+    "export:pages": "node --env-file-if-exists=.env --import tsx server/pages-export.ts"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "recharts": "^3.3.0",
+    "viem": "^2.38.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.38.0",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "eslint": "^9.38.0",
+    "prettier": "^3.9.10",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "typescript-eslint": "^8.46.0",
+    "vite": "^7.1.0"
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "createdAt": "2026-10-22T11:50:54.162Z",
+  "source": "Genuine public onchain observations collected by Gaugecraft on 2026-10-22. No fabricated backfill, synthetic namespace or personal settings.",
+  "file": "launch-history.sqlite.gz",
+  "sha256": "35e7b99e6aac6fa1f41e35b394fa9b4239f1c5d9ea701c5d052ece3aa196ba6f",
+  "bytes": 1269722,
+  "forecasts": 1334,
+  "coverage": [
+    {
+      "chain_id": 1,
+      "observations": 168,
+      "pools": 56,
+      "first_utc_seconds": 1792666799,
+      "last_utc_seconds": 1792668635
+    },
+    {
+      "chain_id": 10,
+      "observations": 90,
+      "pools": 30,
+      "first_utc_seconds": 1792666795,
+      "last_utc_seconds": 1792668635
+    },
+    {
+      "chain_id": 4663,
+      "observations": 136,
+      "pools": 68,
+      "first_utc_seconds": 1792666806,
+      "last_utc_seconds": 1792668645
+    },
+    {
+      "chain_id": 5042,
+      "observations": 14,
+      "pools": 7,
+      "first_utc_seconds": 1792666810,
+      "last_utc_seconds": 1792668649
+    },
+    {
+      "chain_id": 8453,
+      "observations": 810,
+      "pools": 270,
+      "first_utc_seconds": 1792666155,
+      "last_utc_seconds": 1792668619
+    },
+    {
+      "chain_id": 42161,
+      "observations": 90,
+      "pools": 30,
+      "first_utc_seconds": 1792666798,
+      "last_utc_seconds": 1792668637
+    },
+    {
+      "chain_id": 57073,
+      "observations": 26,
+      "pools": 13,
+      "first_utc_seconds": 1792666804,
+      "last_utc_seconds": 1792668643
+    }
+  ]
+}

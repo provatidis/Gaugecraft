@@ -1,0 +1,72 @@
+[
+  {
+    "id": 8453,
+    "name": "Base",
+    "rpc": "https://mainnet.base.org",
+    "sugar": "0xb2a7bdb79fbe254ddaeb151c9ff7649bddad48e5",
+    "leafVoter": "0x382409fad8503fbcdbb27a4211551fa03e884078",
+    "aero": "0x3f5bf3edac59d650d8fdf9657a71f2f904a3a4ee",
+    "stable": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+    "stableDecimals": 6
+  },
+  {
+    "id": 10,
+    "name": "OP Mainnet",
+    "rpc": "https://mainnet.optimism.io",
+    "sugar": "0x25ec650f0b213300d9576923f1cd2c06428d322e",
+    "leafVoter": "0x382409fad8503fbcdbb27a4211551fa03e884078",
+    "aero": "0xbdeaea5205d16f34cb40038052d91235d87b4c54",
+    "stable": "0x0b2c639c533813f4aa9d7837caf62653d097ff85",
+    "stableDecimals": 6
+  },
+  {
+    "id": 42161,
+    "name": "Arbitrum One",
+    "rpc": "https://arb1.arbitrum.io/rpc",
+    "sugar": "0xee717411f6e44f9fee011835c8e6faac5deff166",
+    "leafVoter": "0x382409fad8503fbcdbb27a4211551fa03e884078",
+    "aero": "0x436a085b2751cb87db270ffa66f8d698f87bec82",
+    "stable": "0xaf88d065e77c8cc2239327c5edb3a432268e5831",
+    "stableDecimals": 6
+  },
+  {
+    "id": 1,
+    "name": "Ethereum",
+    "rpc": "https://ethereum.reth.rs/rpc",
+    "sugar": "0xa916a76b052acd3b0ff6cc76b55602fba456a85c",
+    "leafVoter": "0x382409fad8503fbcdbb27a4211551fa03e884078",
+    "aero": "0x9e148c5716b5aadcfd3b71ceae9ee7a9e22c29e2",
+    "stable": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    "stableDecimals": 6
+  },
+  {
+    "id": 57073,
+    "name": "Ink",
+    "rpc": "https://rpc-gel.inkonchain.com",
+    "sugar": "0xd87ae3ec91d0eb8a98a5fff27c28209dc9233260",
+    "leafVoter": "0x382409fad8503fbcdbb27a4211551fa03e884078",
+    "aero": "0x9e148c5716b5aadcfd3b71ceae9ee7a9e22c29e2",
+    "stable": "0x2d270e6886d130d724215a266106e6832161eaed",
+    "stableDecimals": 6
+  },
+  {
+    "id": 4663,
+    "name": "Robinhood Chain",
+    "rpc": "https://rpc.mainnet.chain.robinhood.com",
+    "sugar": "0x471c34138d06001aee399af9ebebbdf680b966b3",
+    "leafVoter": "0x382409fad8503fbcdbb27a4211551fa03e884078",
+    "aero": "0x9e148c5716b5aadcfd3b71ceae9ee7a9e22c29e2",
+    "stable": "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
+    "stableDecimals": 6
+  },
+  {
+    "id": 5042,
+    "name": "Arc",
+    "rpc": "https://rpc.mainnet.arc.io",
+    "sugar": "0xc1994f463859f1884e93145608f82f323fe60fae",
+    "leafVoter": "0x382409fad8503fbcdbb27a4211551fa03e884078",
+    "aero": "0x20077cc0d5e385a0fe9c91bbc7dc744f51559307",
+    "stable": "0x3600000000000000000000000000000000000000",
+    "stableDecimals": 6
+  }
+]

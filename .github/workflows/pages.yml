@@ -1,0 +1,76 @@
+name: Collect and publish Gaugecraft
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: "7,37 * * * *"
+
+# Serialize database restoration, collection, backup and deployment. Never cancel a writer.
+concurrency:
+  group: gaugecraft-pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+      - name: Install pinned package manager and dependencies
+        run: |
+          npm install --global pnpm@11.25.0
+          pnpm install --frozen-lockfile
+      - name: Validate application
+        run: |
+          pnpm lint
+          pnpm test
+          pnpm build
+        env:
+          VITE_DATA_MODE: static
+      - name: Restore durable observation history
+        run: node --import tsx server/pages-state.ts restore
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Collect public onchain observations
+        id: collect
+        continue-on-error: true
+        run: pnpm collect
+      - name: Seed the separate, labeled fixture namespace once
+        run: pnpm demo
+      - name: Preserve database before publishing
+        run: node --import tsx server/pages-state.ts save
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Export static research data
+        run: pnpm export:pages
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist
+      - name: Record collection outcome
+        if: steps.collect.outcome == 'failure'
+        run: echo '::warning::Collection failed. Publishing the last successful observations with their original timestamps and current error status.'
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

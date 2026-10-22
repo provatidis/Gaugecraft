@@ -1,0 +1,8 @@
+[
+  "function all(uint256 _limit, uint256 _offset, uint48 _window, uint8 _filter) external view returns (Lp[] memory _lps)",
+  "function byAddress(address _address, uint48 _window) external view returns (Lp memory _lp)",
+  "struct Lp { address lp; string symbol; uint8 decimals; uint256 liquidity; int24 poolType; int24 tick; uint160 sqrtRatio; address token0; uint256 reserve0; uint256 staked0; address token1; uint256 reserve1; uint256 staked1; address gauge; uint256 gaugeLiquidity; bool gaugeAlive; address rewardsManager; address factory; uint256 emissions; address emissionsToken; uint128 emissionsCap; uint256 poolFee; uint256 unstakedFee; uint256 token0Fees; uint256 token1Fees; uint48 createdAt; address nfpm; uint48 windowStart; uint48 windowEnd; int24 windowOpenTick; int24 windowCloseTick; uint256 windowSwapCount; uint256 windowVolume0; uint256 windowVolume1; uint256 windowFee0; uint256 windowFee1; uint256 windowMevVolume0; uint256 windowMevVolume1; uint256 windowMevFee0; uint256 windowMevFee1; }",
+  "function count() view returns (uint256)",
+  "function tokens(uint256 _limit, uint256 _offset, uint8 _filter, address[] calldata _addresses) external view returns (Token[] memory _tokens)",
+  "struct Token { address tokenAddress; string symbol; string name; uint8 decimals; bool listed; uint8 tier; uint8 weight; uint240 flags; }"
+]

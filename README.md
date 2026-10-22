@@ -46,13 +46,13 @@ Relative asset URLs support the repository subpath and an inherited user-site do
 
 ## Daily workflow
 
-1. **Markets** starts with estimated total pool rewards descending. Search token symbols, network or pool address; sort any column; add pools to your local watchlist. The pool total is shared by every allocator.
+1. **Markets** starts with estimated total pool rewards descending. Search token symbols, network or pool address; use **Returns** for the main revenue comparison or **All metrics** for TVL, volume and changes; sort any visible column; add pools to your local watchlist. Pool names stay pinned while you scroll. The pool total is shared by every allocator.
 2. **Pool analysis** shows actual UTC source windows, block identity, six charts, incentive schedules and descriptive alerts. Chart ranges are 24h, 48h, 7d and 30d; longer ranges do not invent missing samples.
 3. **Simulator** accepts allocation power and optional stake value in USD. Enter any power you already have in that pool to avoid counting it twice. Optional fixed-stake decay and activation delay affect the earnings integral. Inputs remain in this browser's local storage.
 4. **Opportunities** shows baseline comparisons until a pool passes the history gate. Once eligible, it orders candidates by stressed earnings per 1,000 additional power. These assumptions are transparent and deliberately uncalibrated.
 5. **Performance** evaluates frozen forecasts after 48 hours, only with sufficient observations. Revenue and return results are explicitly reconstruction proxies, not realized wallet claims. Benchmarks use selections saved at prediction time and matched complete cohorts.
 
-Hover metric information icons for definitions. Missing values are `—`, never silently zero. Stale pools are marked and excluded from opportunity candidates. Refresh reloads the local database; it does not trigger an unbounded RPC collection.
+Hover metric information icons for definitions. Missing values are `—`, never silently zero. Stale pools are marked and excluded from opportunity candidates. Refresh reloads the latest observations, charts and forecast evaluations while preserving table filters. It does not trigger an unbounded RPC collection. **Data health** shows freshness and the latest collection result for every configured network; one successful network cannot hide older observations on another.
 
 ## Data and configuration
 

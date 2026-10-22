@@ -25,6 +25,7 @@ import {
   type SimulationInput,
 } from "../analysis/math.js";
 import { get, assetUrl, exportUrl, hosted } from "./data.js";
+import { dataHealth, isFresh } from "../analysis/freshness.js";
 const money = (n: Maybe | undefined, compact = false) =>
   n == null
     ? "—"
@@ -155,9 +156,10 @@ export default function App() {
     const abort = new AbortController();
     let alive = true;
     setLoading(true);
-    setState(null);
-    const load = () =>
-      get<State>(`/api/state?mode=${mode}`, abort.signal)
+    setState((previous) => (previous?.mode === mode ? previous : null));
+    const load = () => {
+      setLoading(true);
+      return get<State>(`/api/state?mode=${mode}`, abort.signal)
         .then((s) => {
           if (alive) {
             setState(s);
@@ -171,6 +173,7 @@ export default function App() {
             setLoading(false);
           }
         });
+    };
     void load();
     const timer = setInterval(load, 60000);
     return () => {
@@ -179,23 +182,35 @@ export default function App() {
       clearInterval(timer);
     };
   }, [mode, refresh]);
-  const rows = useMemo(() => state?.markets ?? [], [state]);
+  const rows = useMemo(
+    () => (state?.mode === mode ? state.markets : []),
+    [state, mode],
+  );
   const current =
     rows.find((r) => r.snapshot.id === selected) ??
     [...rows].sort(
       (a, b) =>
         (b.snapshot.rewards48hUsd ?? -1) - (a.snapshot.rewards48hUsd ?? -1),
     )[0];
-  const last = rows.length
-    ? Math.max(...rows.map((r) => r.snapshot.retrievedAt))
-    : null;
-  const liveAge = last === null ? null : (Date.now() / 1000 - last) / 60;
+  const health = dataHealth(
+    rows,
+    state?.configuredChains ?? [],
+    state?.runs ?? [],
+    mode,
+  );
+  const last = health.newest;
   function open(row: MarketRow, p: Page = "analysis") {
     setSelected(row.snapshot.id);
     setPage(p);
     window.scrollTo({ top: 0, behavior: "instant" });
   }
-  const stale = mode === "live" && liveAge !== null && liveAge > 75;
+  const stale = mode === "live" && health.stalePools > 0;
+  const healthy =
+    mode === "demo" ||
+    (!stale &&
+      health.issues === 0 &&
+      health.currentNetworks === health.networks.length);
+  const revision = `${state?.now ?? 0}:${refresh}`;
   return (
     <div className="shell">
       <aside className="sidebar">
@@ -215,19 +230,31 @@ export default function App() {
           </span>
         </a>
         <div className="sidebar-caption">RESEARCH WORKSPACE</div>
-        <nav>
+        <nav aria-label="Research sections">
           {nav.map(([id, icon, label]) => (
             <button
               key={id}
               className={page === id ? "nav-item active" : "nav-item"}
-              onClick={() => setPage(id)}
+              onClick={() => {
+                setPage(id);
+                window.scrollTo({ top: 0, behavior: "instant" });
+              }}
+              title={label}
               aria-current={page === id ? "page" : undefined}
             >
               <span>{icon}</span>
               {label}
               {id === "opportunities" && (
                 <small>
-                  {rows.filter((r) => r.forecast.basis === "history").length}
+                  {
+                    rows.filter(
+                      (r) =>
+                        r.snapshot.active &&
+                        isFresh(r.snapshot) &&
+                        r.forecast.basis === "history" &&
+                        r.forecast.stressedPer1000 !== null,
+                    ).length
+                  }
                 </small>
               )}
             </button>
@@ -273,9 +300,11 @@ export default function App() {
               <option value="demo">Sample fixtures</option>
             </select>
             <button
-              className="icon-button"
+              className={`icon-button ${loading ? "refreshing" : ""}`}
               title="Refresh observations"
               aria-label="Refresh observations"
+              aria-busy={loading}
+              disabled={loading}
               onClick={() => setRefresh((r) => r + 1)}
             >
               ↻
@@ -290,15 +319,20 @@ export default function App() {
             </div>
           )}
           {error && (
-            <div className="notice danger">
+            <div className="notice danger" role="alert">
               {error} {state ? "Showing the last loaded observations." : ""}
             </div>
           )}
           {stale && (
             <div className="notice warning">
-              Latest successful collection is {Math.floor(liveAge!)} minutes
-              old. Treat the market view as stale; opportunity ranking is paused
-              for stale pools.
+              <b>
+                {health.stalePools}{" "}
+                {health.stalePools === 1 ? "pool has" : "pools have"} stale
+                observations.
+              </b>{" "}
+              These observations are more than 75 minutes old and are excluded
+              from opportunity comparisons. Check data health below for network
+              details.
             </div>
           )}
           <div className="page-heading">
@@ -342,8 +376,8 @@ export default function App() {
               </a>
             )}
           </div>
-          <div className="freshness">
-            <span className={`status-dot ${last && !stale ? "" : "amber"}`} />
+          <div className="freshness" role="status">
+            <span className={`status-dot ${last && healthy ? "" : "amber"}`} />
             <b>
               {mode === "demo"
                 ? "Fixture dataset"
@@ -353,9 +387,25 @@ export default function App() {
             </b>
             <span>
               {last
-                ? `Retrieved ${date(last)}`
+                ? `Latest retrieval ${date(last)}`
                 : "The collector will preserve genuine observations as they arrive."}
             </span>
+            {mode === "live" && state && (
+              <span
+                className={`health-pill ${healthy ? "" : "attention"}`}
+                title={
+                  health.oldest
+                    ? `Oldest retained pool observation: ${date(health.oldest)}. Current means every pool observation on a network is within 75 minutes.`
+                    : "Waiting for successful collection."
+                }
+              >
+                {health.currentNetworks}/{health.networks.length} networks
+                current
+                {health.issues > 0
+                  ? ` · ${health.issues} collection ${health.issues === 1 ? "issue" : "issues"}`
+                  : ""}
+              </span>
+            )}
             <span className="freshness-end">
               48h horizon <span>·</span>{" "}
               {hosted ? "Scheduled snapshots" : "30 min collection"}
@@ -399,7 +449,7 @@ export default function App() {
                 />
               )}
               {page === "opportunities" && (
-                <Opportunities rows={rows} open={open} mode={mode} />
+                <Opportunities rows={rows} open={open} />
               )}
               {page === "analysis" && current && (
                 <Analysis
@@ -407,6 +457,7 @@ export default function App() {
                   rows={rows}
                   select={setSelected}
                   mode={mode}
+                  revision={revision}
                   simulate={() => setPage("simulator")}
                 />
               )}
@@ -414,7 +465,7 @@ export default function App() {
                 <Simulator row={current} rows={rows} select={setSelected} />
               )}
               {page === "performance" && (
-                <Performance mode={mode} rows={rows} />
+                <Performance mode={mode} rows={rows} revision={revision} />
               )}
             </>
           )}
@@ -430,8 +481,10 @@ export default function App() {
           {state && (
             <details className="source-health">
               <summary>
-                Collector status · {state.runs[0]?.status ?? "waiting"} ·
-                configured networks {state.configuredChains.join(", ")}
+                Data health ·{" "}
+                {mode === "demo"
+                  ? "Sample fixture namespace"
+                  : `${health.currentNetworks}/${health.networks.length} networks current${health.issues ? ` · ${health.issues} collection issues` : ""}`}
               </summary>
               <p>
                 {state.collectionKind === "github-actions"
@@ -440,6 +493,29 @@ export default function App() {
                     ? "Collection runs every 30 minutes while the local server is running."
                     : "Background collection is disabled for this server."}
               </p>
+              {mode === "live" && (
+                <div className="network-health">
+                  {health.networks.map((network) => (
+                    <div key={network.id}>
+                      <span
+                        className={`status-dot ${network.current && network.run?.status !== "error" && network.run?.status !== "partial" ? "" : "amber"}`}
+                      />
+                      <b>{network.name}</b>
+                      <span>
+                        {network.retrievedAt
+                          ? date(network.retrievedAt)
+                          : "No observations yet"}
+                      </span>
+                      <small>
+                        {network.run?.error ??
+                          (network.current
+                            ? "Current observations"
+                            : "Waiting for fresh observations")}
+                      </small>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="table-scroll">
                 <table>
                   <thead>
@@ -488,10 +564,19 @@ function Markets({
     [sort, setSort] = useState("rewards48hUsd"),
     [desc, setDesc] = useState(true),
     [page, setPage] = useState(0);
+  const [view, setView] = useLocal<"focus" | "all">("gc-market-view", "focus");
   const active = rows.filter((r) => r.snapshot.active),
     knownRewards = active.filter((r) => r.snapshot.rewards48hUsd !== null),
     knownTvl = active.filter((r) => r.snapshot.tvlUsd !== null),
-    ready = active.filter((r) => r.forecast.basis === "history");
+    ready = active.filter(
+      (r) =>
+        isFresh(r.snapshot) &&
+        r.forecast.basis === "history" &&
+        r.forecast.stressedPer1000 !== null,
+    );
+  const partialWindows = active.filter(
+    (r) => r.snapshot.windowEnd - r.snapshot.windowStart < 47 * 3600,
+  ).length;
   const filtered = useMemo(
     () =>
       rows
@@ -535,11 +620,11 @@ function Markets({
     ["pool", "Pool"],
     ["stakeApr", "Stake APR"],
     ["rewards48hUsd", "Est. rewards 48h"],
-    ["eligibleFees48hUsd", "Eligible fees 48h"],
+    ["eligibleFees48hUsd", "Eligible fees"],
     ["incentives48hUsd", "Incentives 48h"],
     ["allocation", "Allocation power"],
     ["tvlUsd", "TVL"],
-    ["volume48hUsd", "Volume 48h"],
+    ["volume48hUsd", "Volume · observed"],
     ["aprChange", "APR Δ 6h"],
     ["allocationChange", "Allocation Δ 6h"],
   ];
@@ -549,6 +634,12 @@ function Markets({
       setSort(key);
       setDesc(true);
     }
+    setPage(0);
+  }
+  function clearFilters() {
+    setSearch("");
+    setChain("all");
+    setStarred(false);
     setPage(0);
   }
   return (
@@ -639,6 +730,7 @@ function Markets({
           </select>
           <button
             className={starred ? "button filter selected" : "button filter"}
+            aria-pressed={starred}
             onClick={() => {
               setStarred(!starred);
               setPage(0);
@@ -646,9 +738,66 @@ function Markets({
           >
             ☆ Watchlist <span>{watch.length}</span>
           </button>
+          {(search || chain !== "all" || starred) && (
+            <button className="clear-filters" onClick={clearFilters}>
+              Clear filters
+            </button>
+          )}
         </div>
-        <div className="table-scroll">
-          <table className="markets-table">
+        <div className="market-view-bar">
+          <p>
+            {partialWindows > 0 ? (
+              <>
+                <b>{partialWindows} pools with partial fee windows.</b> Values
+                below show the actual observed duration.
+              </>
+            ) : (
+              "Fees and volume use each pool’s observed source window."
+            )}
+          </p>
+          <div
+            className="segmented"
+            role="group"
+            aria-label="Market table view"
+          >
+            <button
+              aria-pressed={view === "focus"}
+              className={view === "focus" ? "selected" : ""}
+              onClick={() => {
+                setView("focus");
+                if (
+                  [
+                    "tvlUsd",
+                    "volume48hUsd",
+                    "aprChange",
+                    "allocationChange",
+                  ].includes(sort)
+                ) {
+                  setSort("rewards48hUsd");
+                  setDesc(true);
+                }
+              }}
+            >
+              Returns
+            </button>
+            <button
+              aria-pressed={view === "all"}
+              className={view === "all" ? "selected" : ""}
+              onClick={() => setView("all")}
+            >
+              All metrics
+            </button>
+          </div>
+        </div>
+        <div
+          className="table-scroll market-scroll"
+          tabIndex={0}
+          role="region"
+          aria-label="Pool comparison table; scroll horizontally for more metrics"
+        >
+          <table
+            className={`markets-table ${view === "focus" ? "focus-view" : ""}`}
+          >
             <thead>
               <tr>
                 <th className="star-col" aria-label="Watchlist" />
@@ -700,10 +849,9 @@ function Markets({
                           <Pair s={s} />
                         </button>
                         {!s.active && <Badge tone="warn">Inactive</Badge>}
-                        {s.mode === "live" &&
-                          Date.now() / 1000 - s.retrievedAt > 75 * 60 && (
-                            <Badge tone="warn">Stale observation</Badge>
-                          )}
+                        {!isFresh(s) && (
+                          <Badge tone="warn">Stale observation</Badge>
+                        )}
                       </td>
                       <td className="apr">
                         <button
@@ -717,16 +865,22 @@ function Markets({
                       </td>
                       <td className="emphasis">
                         {money(s.rewards48hUsd)}
-                        <small>pool total · est.</small>
+                        <small>shared pool total</small>
                       </td>
                       <td>
                         {money(s.eligibleFees48hUsd)}
-                        <small>
+                        <small
+                          className={
+                            s.windowEnd - s.windowStart < 47 * 3600
+                              ? "partial-window"
+                              : ""
+                          }
+                        >
                           {Math.max(
                             0,
                             (s.windowEnd - s.windowStart) / 3600,
                           ).toFixed(1)}
-                          h source window · est.
+                          h observed · est.
                         </small>
                       </td>
                       <td>
@@ -745,7 +899,16 @@ function Markets({
                         <small>reward supply</small>
                       </td>
                       <td>{money(s.tvlUsd, true)}</td>
-                      <td>{money(s.volume48hUsd, true)}</td>
+                      <td>
+                        {money(s.volume48hUsd, true)}
+                        <small>
+                          {Math.max(
+                            0,
+                            (s.windowEnd - s.windowStart) / 3600,
+                          ).toFixed(1)}
+                          h observed
+                        </small>
+                      </td>
                       <td
                         className={
                           r.aprChange === null
@@ -776,7 +939,21 @@ function Markets({
             </tbody>
           </table>
           {filtered.length === 0 && (
-            <div className="empty compact">No pools match these filters.</div>
+            <div className="empty compact">
+              <h3>
+                {starred
+                  ? "No watched pools match these filters."
+                  : "No pools match these filters."}
+              </h3>
+              <p>
+                {starred && watch.length === 0
+                  ? "Add pools with the star beside their name to build your watchlist."
+                  : "Try a token symbol, network name or pool address."}
+              </p>
+              <button className="button secondary" onClick={clearFilters}>
+                Clear filters
+              </button>
+            </div>
           )}
         </div>
         <div className="table-footer">
@@ -784,7 +961,7 @@ function Markets({
             {filtered.length ? currentPage * 25 + 1 : 0}–
             {Math.min((currentPage + 1) * 25, filtered.length)} of{" "}
             {filtered.length} pools{" "}
-            <span className="muted">· missing values stay blank</span>
+            <span className="muted">· — means unavailable</span>
           </span>
           <div>
             <button
@@ -813,8 +990,10 @@ function Markets({
           <b>A high APR is a starting point.</b>
           <p>
             Check incentive expiry, source-window length and incoming
-            allocation. Launch-day revenue is a partial observation, not a full
-            48-hour history.
+            allocation.{" "}
+            {partialWindows > 0
+              ? "Short fee windows are preserved as observed; they are not scaled into a full 48 hours."
+              : "Use the simulator to compare earnings after your own allocation."}
           </p>
         </div>
         <button onClick={() => open(filtered[0] ?? rows[0])}>
@@ -846,14 +1025,11 @@ function Stat({
 function Opportunities({
   rows,
   open,
-  mode,
 }: {
   rows: MarketRow[];
   open: (r: MarketRow, p?: Page) => void;
-  mode: Mode;
 }) {
-  const fresh = (r: MarketRow) =>
-    mode === "demo" || Date.now() / 1000 - r.snapshot.retrievedAt <= 75 * 60;
+  const fresh = (r: MarketRow) => isFresh(r.snapshot);
   const ranked = rows
     .filter(
       (r) =>
@@ -998,12 +1174,14 @@ function Analysis({
   rows,
   select,
   mode,
+  revision,
   simulate: goSim,
 }: {
   row: MarketRow;
   rows: MarketRow[];
   select: (s: string) => void;
   mode: Mode;
+  revision: string;
   simulate: () => void;
 }) {
   const [days, setDays] = useState(2),
@@ -1023,7 +1201,7 @@ function Analysis({
         if (e.name !== "AbortError") setError(e.message);
       });
     return () => abort.abort();
-  }, [s.id, mode, days]);
+  }, [s.id, mode, days, revision]);
   const charts: [keyof HistoryPoint, string, string][] = [
     ["stakeApr", "Stake APR", "% · estimate"],
     ["rewards48hUsd", "Pool rewards · next 48h", "USD · estimate"],
@@ -1171,14 +1349,18 @@ function Analysis({
                             .toISOString()
                             .slice(days > 2 ? 5 : 11, days > 2 ? 10 : 16)
                         }
-                        tick={{ fontSize: 10, fill: "#819096" }}
+                        tick={{ fontSize: 11, fill: "#647984" }}
                         minTickGap={60}
                       />
                       <YAxis
                         width={58}
                         tickFormatter={(v) => number(Number(v), true)}
-                        tick={{ fontSize: 10, fill: "#819096" }}
-                        domain={[0, "auto"]}
+                        tick={{ fontSize: 11, fill: "#647984" }}
+                        domain={
+                          key === "stakeApr" || key === "allocation"
+                            ? ["auto", "auto"]
+                            : [0, "auto"]
+                        }
                       />
                       <Tooltip
                         labelFormatter={(t) => date(Number(t))}
@@ -1201,7 +1383,7 @@ function Analysis({
                         name={label}
                         stroke="#14877f"
                         strokeWidth={2}
-                        dot={history.length < 3 ? { r: 4 } : false}
+                        dot={history.length < 6 ? { r: 3 } : false}
                         activeDot={{ r: 4 }}
                         connectNulls={false}
                         isAnimationActive={false}
@@ -1214,6 +1396,13 @@ function Analysis({
                     First observation saved. A trend needs more snapshots.
                   </div>
                 )}
+                {(key === "stakeApr" || key === "allocation") &&
+                  history.length >= 2 && (
+                    <div className="chart-caption">
+                      Vertical axis follows the observed range to make changes
+                      visible.
+                    </div>
+                  )}
               </>
             ) : (
               <div className="chart-empty">
@@ -1515,23 +1704,29 @@ interface PerformanceData {
   scope: string;
   totalStored: number;
 }
-function Performance({ mode, rows }: { mode: Mode; rows: MarketRow[] }) {
+function Performance({
+  mode,
+  rows,
+  revision,
+}: {
+  mode: Mode;
+  rows: MarketRow[];
+  revision: string;
+}) {
   const [data, setData] = useState<PerformanceData | null>(null),
     [error, setError] = useState("");
   const [filter, setFilter] = useState("all"),
     [page, setPage] = useState(0);
   useEffect(() => {
     const abort = new AbortController();
-    setData(null);
     setError("");
-    setPage(0);
     get<PerformanceData>(`/api/performance?mode=${mode}`, abort.signal)
       .then(setData)
       .catch((e) => {
         if (e.name !== "AbortError") setError(e.message);
       });
     return () => abort.abort();
-  }, [mode]);
+  }, [mode, revision]);
   if (error) return <div className="notice danger">{error}</div>;
   if (!data)
     return <div className="loading">Evaluating stored forecast windows…</div>;

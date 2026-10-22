@@ -4,8 +4,9 @@ const store = new Store();
 if (process.argv.includes("--watch")) {
   const stop = scheduleCollector(store);
   for (const sig of ["SIGINT", "SIGTERM"] as const)
-    process.on(sig, () => {
-      stop();
+    process.on(sig, async () => {
+      await stop();
+      store.close();
       process.exit(0);
     });
 } else {

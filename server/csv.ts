@@ -4,7 +4,7 @@ export function csvCell(value: unknown): string {
   if (/^[=+@\-\t\r]/.test(text)) text = `'${text}`;
   return `"${text.replaceAll('"', '""')}"`;
 }
-export function toCsv(rows: Snapshot[]) {
+export function* csvLines(rows: Iterable<Snapshot>): Generator<string> {
   const columns = [
     "mode",
     "pool_id",
@@ -27,33 +27,34 @@ export function toCsv(rows: Snapshot[]) {
     "volume_window_usd_estimate",
     "warnings",
   ];
-  return (
-    [
-      columns,
-      ...rows.map((s) => [
-        s.mode,
-        s.id,
-        s.chain,
-        s.token0.symbol,
-        s.token1.symbol,
-        new Date(s.observedAt * 1000).toISOString(),
-        new Date(s.retrievedAt * 1000).toISOString(),
-        s.block,
-        s.blockHash,
-        new Date(s.windowStart * 1000).toISOString(),
-        new Date(s.windowEnd * 1000).toISOString(),
-        s.stakeApr,
-        s.rewards48hUsd,
-        s.grossFees48hUsd,
-        s.eligibleFees48hUsd,
-        s.incentives48hUsd,
-        s.allocation,
-        s.tvlUsd,
-        s.volume48hUsd,
-        s.warnings.join(" | "),
-      ]),
+  yield columns.map(csvCell).join(",") + "\n";
+  for (const s of rows) {
+    yield [
+      s.mode,
+      s.id,
+      s.chain,
+      s.token0.symbol,
+      s.token1.symbol,
+      new Date(s.observedAt * 1000).toISOString(),
+      new Date(s.retrievedAt * 1000).toISOString(),
+      s.block,
+      s.blockHash,
+      new Date(s.windowStart * 1000).toISOString(),
+      new Date(s.windowEnd * 1000).toISOString(),
+      s.stakeApr,
+      s.rewards48hUsd,
+      s.grossFees48hUsd,
+      s.eligibleFees48hUsd,
+      s.incentives48hUsd,
+      s.allocation,
+      s.tvlUsd,
+      s.volume48hUsd,
+      s.warnings.join(" | "),
     ]
-      .map((row) => row.map(csvCell).join(","))
-      .join("\n") + "\n"
-  );
+      .map(csvCell)
+      .join(",") + "\n";
+  }
+}
+export function toCsv(rows: Iterable<Snapshot>) {
+  return [...csvLines(rows)].join("");
 }

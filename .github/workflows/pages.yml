@@ -19,6 +19,7 @@ permissions:
 
 jobs:
   build:
+    if: github.event_name != 'schedule' || vars.COLLECTOR_HOSTING != 'railway'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
@@ -32,29 +33,43 @@ jobs:
         run: |
           npm install --global pnpm@11.25.0
           pnpm install --frozen-lockfile
+      - name: Validate hosting configuration
+        if: vars.COLLECTOR_HOSTING == 'railway'
+        run: node -e 'const u = new URL(process.env.VITE_API_ORIGIN); if (u.protocol !== "https:" || u.pathname !== "/") throw new Error("Set VITE_API_ORIGIN to the verified Railway HTTPS origin before cutover")'
+        env:
+          VITE_API_ORIGIN: ${{ vars.VITE_API_ORIGIN }}
       - name: Validate application
         run: |
           pnpm lint
           pnpm test
           pnpm build
         env:
-          VITE_DATA_MODE: static
+          VITE_DATA_MODE: ${{ vars.COLLECTOR_HOSTING == 'railway' && 'api' || 'static' }}
+          VITE_API_ORIGIN: ${{ vars.COLLECTOR_HOSTING == 'railway' && vars.VITE_API_ORIGIN || '' }}
       - name: Restore durable observation history
+        if: vars.COLLECTOR_HOSTING != 'railway'
         run: node --import tsx server/pages-state.ts restore
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Collect public onchain observations
+        if: vars.COLLECTOR_HOSTING != 'railway'
         id: collect
         continue-on-error: true
         run: pnpm collect
       - name: Seed the separate, labeled fixture namespace once
+        if: vars.COLLECTOR_HOSTING != 'railway'
         run: pnpm demo
       - name: Preserve database before publishing
+        if: vars.COLLECTOR_HOSTING != 'railway'
         run: node --import tsx server/pages-state.ts save
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Export static research data
+        if: vars.COLLECTOR_HOSTING != 'railway'
         run: pnpm export:pages
+      - name: Publish methodology for API-backed frontend
+        if: vars.COLLECTOR_HOSTING == 'railway'
+        run: node -e 'const fs = require("node:fs"); for (const f of ["SOURCES.md", "PLAN.md"]) fs.copyFileSync(f, "dist/" + f); fs.writeFileSync("dist/.nojekyll", "")'
       - uses: actions/upload-pages-artifact@v4
         with:
           path: dist

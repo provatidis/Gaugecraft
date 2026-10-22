@@ -75,22 +75,27 @@ export async function collect(
   }
 }
 export function scheduleCollector(store: Store) {
-  let stopped = false,
-    timer: ReturnType<typeof setTimeout>;
-  const tick = async () => {
-    try {
-      await collect(store);
-    } catch (e) {
-      console.error("Collector:", e instanceof Error ? e.message : "failed");
-    }
-    if (!stopped) {
-      const next = 1800000 - (Date.now() % 1800000);
-      timer = setTimeout(tick, Math.max(next, 1000));
-    }
+  let stopped = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let active: Promise<void> = Promise.resolve();
+  const tick = () => {
+    if (stopped) return;
+    active = (async () => {
+      try {
+        await collect(store);
+      } catch {
+        console.error("Collector failed; previous observations preserved");
+      }
+      if (!stopped) {
+        const next = 1800000 - (Date.now() % 1800000);
+        timer = setTimeout(tick, Math.max(next, 1000));
+      }
+    })();
   };
-  void tick();
-  return () => {
+  tick();
+  return async () => {
     stopped = true;
     clearTimeout(timer);
+    await active;
   };
 }

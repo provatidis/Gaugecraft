@@ -1,9 +1,20 @@
-import { backup, DatabaseSync } from "node:sqlite";
-import { mkdir, readFile, writeFile, rename, unlink } from "node:fs/promises";
-import { gzipSync, gunzipSync } from "node:zlib";
-import { createHash } from "node:crypto";
+import { DatabaseSync } from "node:sqlite";
+import { createReadStream, createWriteStream } from "node:fs";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import { mkdir, rename, unlink, stat, copyFile } from "node:fs/promises";
+import { createGunzip } from "node:zlib";
+import {
+  createBackup,
+  fileDigest,
+  migrateDatabase,
+  verifyDatabase,
+} from "./storage-maintenance.js";
+import { version } from "./storage-schema.js";
+
 import { databasePath } from "./store.js";
 import { dirname } from "node:path";
+import { createHash } from "node:crypto";
 
 // The release is durable collector storage, separate from source commits and expiring caches.
 // Each backup has a unique name. Keep three complete copies; only prune after a verified upload.
@@ -24,11 +35,14 @@ type Asset = {
   digest?: string;
 };
 type Release = { id: number; upload_url: string; assets: Asset[] };
-async function request(url: string, init: RequestInit = {}) {
+async function request(
+  url: string,
+  init: RequestInit & { duplex?: "half" } = {},
+) {
   for (let attempt = 0; ; attempt++) {
     const response = await fetch(url, {
       ...init,
-      signal: AbortSignal.timeout(180000),
+      signal: AbortSignal.timeout(600000),
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: "application/vnd.github+json",
@@ -63,20 +77,46 @@ function assets(r: Release) {
     )
     .sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id - a.id);
 }
-function verifyDatabase(file: string) {
-  const db = new DatabaseSync(file, { readOnly: true });
-  try {
-    if (db.prepare("PRAGMA integrity_check").get()?.integrity_check !== "ok")
-      throw new Error("Backup failed SQLite integrity check");
-    db.prepare("SELECT count(*) FROM snapshots").get();
-  } finally {
-    db.close();
+async function uploadBackup(r: Release, name: string, file: string) {
+  const size = (await stat(file)).size;
+  const checksum = await fileDigest(file);
+  const response = await request(`${r.upload_url.split("{")[0]}?name=${name}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/gzip",
+      "Content-Length": String(size),
+    },
+    body: createReadStream(file) as any,
+    duplex: "half",
+  });
+  if (!response.ok)
+    throw new Error(`Cannot upload collector backup: HTTP ${response.status}`);
+  const saved = (await response.json()) as Asset;
+  if (
+    saved.size !== size ||
+    (saved.digest && saved.digest !== `sha256:${checksum}`)
+  )
+    throw new Error("Uploaded collector backup failed verification");
+  if (!saved.digest) {
+    const check = await request(`${root}/releases/assets/${saved.id}`, {
+      headers: { Accept: "application/octet-stream" },
+    });
+    if (!check.ok || !check.body)
+      throw new Error("Cannot verify remote backup");
+    const hash = createHash("sha256");
+    let length = 0;
+    for await (const chunk of Readable.fromWeb(check.body as any)) {
+      hash.update(chunk);
+      length += chunk.length;
+    }
+    if (length !== size || hash.digest("hex") !== checksum)
+      throw new Error("Remote backup checksum mismatch");
   }
 }
 await mkdir(dirname(path), { recursive: true });
 if (process.argv.includes("restore")) {
   const r = await release();
-  let bytes: Buffer;
+  const download = `${path}.download.gz`;
   if (r) {
     const asset = assets(r)[0];
     if (!asset)
@@ -86,39 +126,54 @@ if (process.argv.includes("restore")) {
     const response = await request(`${root}/releases/assets/${asset.id}`, {
       headers: { Accept: "application/octet-stream" },
     });
-    if (!response.ok)
+    if (!response.ok || !response.body)
       throw new Error(
         `Cannot download collector backup: HTTP ${response.status}`,
       );
-    bytes = Buffer.from(await response.arrayBuffer());
-    if (bytes.length !== asset.size)
+    await pipeline(
+      Readable.fromWeb(response.body as any),
+      createWriteStream(download, { mode: 0o600 }),
+    );
+    if ((await stat(download)).size !== asset.size)
       throw new Error("Incomplete backup download");
-    if (
-      asset.digest &&
-      asset.digest !==
-        `sha256:${createHash("sha256").update(bytes).digest("hex")}`
-    )
+    if (asset.digest && asset.digest !== `sha256:${await fileDigest(download)}`)
       throw new Error("Backup digest mismatch");
     console.log(`Restoring ${asset.name}`);
   } else {
-    bytes = await readFile("config/launch-history.sqlite.gz");
+    await copyFile("config/launch-history.sqlite.gz", download);
     console.log(
       "First deployment: restoring verified launch-day public observations.",
     );
   }
-  await writeFile(`${path}.restore`, gunzipSync(bytes));
-  verifyDatabase(`${path}.restore`);
-  await rename(`${path}.restore`, path);
+  const restored = `${path}.restore`;
+  await pipeline(
+    createReadStream(download),
+    createGunzip(),
+    createWriteStream(restored, { flags: "wx", mode: 0o600 }),
+  );
+  verifyDatabase(restored);
+  const check = new DatabaseSync(restored, { readOnly: true });
+  const oldVersion = version(check);
+  check.close();
+  if (oldVersion !== 3) {
+    // Retain a permanent pre-migration rollback asset outside rolling retention.
+    if (r)
+      await uploadBackup(
+        r,
+        `gaugecraft-pre-v3-${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT}.sqlite.gz`,
+        download,
+      );
+    const report = await migrateDatabase(restored, `${path}.migrated`);
+    console.log(
+      `Verified storage migration: ${report.beforeBytes} → ${report.afterBytes} bytes; all record fingerprints unchanged.`,
+    );
+    await rename(`${path}.migrated`, path);
+    await unlink(restored);
+  } else await rename(restored, path);
+  await unlink(download);
 } else if (process.argv.includes("save")) {
-  const db = new DatabaseSync(path, { readOnly: true });
-  try {
-    await backup(db, `${path}.backup`);
-  } finally {
-    db.close();
-  }
-  verifyDatabase(`${path}.backup`);
-  const bytes = gzipSync(await readFile(`${path}.backup`), { level: 9 });
-  await unlink(`${path}.backup`);
+  const upload = `${path}.upload.gz`;
+  const manifest = await createBackup(path, upload);
   let r = await release();
   if (!r) {
     const response = await request(`${root}/releases`, {
@@ -141,22 +196,10 @@ if (process.argv.includes("restore")) {
   const name = `gaugecraft-${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT}.sqlite.gz`;
   if (!/^gaugecraft-\d+-\d+\.sqlite\.gz$/.test(name))
     throw new Error("Missing GitHub run identity");
-  const response = await request(`${r.upload_url.split("{")[0]}?name=${name}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/gzip" },
-    body: new Uint8Array(bytes),
-  });
-  if (!response.ok)
-    throw new Error(`Cannot upload collector backup: HTTP ${response.status}`);
-  const saved = (await response.json()) as Asset;
-  if (
-    saved.size !== bytes.length ||
-    (saved.digest &&
-      saved.digest !==
-        `sha256:${createHash("sha256").update(bytes).digest("hex")}`)
-  )
-    throw new Error("Uploaded collector backup failed verification");
-  console.log(`Stored ${name} (${bytes.length} bytes).`);
+  await uploadBackup(r, name, upload);
+  console.log(`Stored ${name} (${manifest.compressedBytes} bytes).`);
+  await unlink(upload);
+  await unlink(`${upload}.json`);
   const latest = await release();
   for (const old of latest ? assets(latest).slice(3) : []) {
     const removed = await request(`${root}/releases/assets/${old.id}`, {

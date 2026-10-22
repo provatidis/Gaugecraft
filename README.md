@@ -92,6 +92,20 @@ pnpm build
 pnpm start
 ```
 
+## Persistent hosting and storage migration
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for the Railway/R2 setup, measured capacity, backup and recovery commands, monitoring and controlled handover. The code is ready for provisioning; the public collector remains on GitHub until the hosting variables are deliberately changed and the new service is verified.
+
+Storage v3 compresses individual records and references immutable forecast inputs instead of duplicating them. It preserves all history and rejects unverified migration. An existing v2 local database must be migrated to a **new file** before this version starts:
+
+```sh
+pnpm storage:migrate data/gaugecraft.sqlite data/gaugecraft-v3.sqlite
+# After inspecting the verified report and stopping the old process:
+GAUGECRAFT_DB=data/gaugecraft-v3.sqlite pnpm dev
+```
+
+Keep the original file for rollback. Migration does not install a system service, change another repository, create a paid account, or start remote collection. See the deployment guide for what remains to be provisioned and validated.
+
 ## GitHub Pages
 
 The repository includes `.github/workflows/pages.yml`. Enable **Settings → Pages → Source → GitHub Actions**. Push to `main` or select **Actions → Collect and publish Gaugecraft → Run workflow** to publish. No paid service or manually supplied secret is required: the workflow uses GitHub's repository-scoped token and the configured public RPCs.
@@ -102,7 +116,7 @@ If observations become stale, inspect the workflow run **Event** column. A succe
 
 Observation history persists as compressed SQLite assets on the **Collector history** prerelease (`collector-state`), separate from source commits. Each run restores the newest complete backup and saves a uniquely named replacement before publishing; the three newest complete backups are retained. A failed restore stops the workflow instead of silently discarding history. The first deployment starts with `config/launch-history.sqlite.gz`, containing actual public contract reads collected on launch day, with provenance in `config/launch-history.json`. No personal settings are included. The fixture namespace is seeded separately and explicitly labeled.
 
-The hosted dashboard downloads precomputed observations. Simulator inputs and watchlists stay in browser storage and are never sent to the collector. Charts and CSV contain the last 30 days; the release database retains full history and frozen forecasts. Missing prices and failed network reads stay visible. A total RPC failure publishes the last successful observations with their original timestamps and an error status. Backups grow with history; monitor release size as the dataset grows and migrate durable storage before approaching GitHub's per-asset limits.
+The hosted dashboard downloads precomputed observations. Simulator inputs and watchlists stay in browser storage and are never sent to the collector. Charts and CSV contain the last 30 days; the release database retains full history and frozen forecasts. Missing prices and failed network reads stay visible. A total RPC failure publishes the last successful observations with their original timestamps and an error status. Backups grow with history. The transition workflow streams backups and preserves a permanent pre-v3 rollback asset; see the persistent-hosting guide for capacity planning and the eventual collector handover.
 
 To build the same static export locally, after collecting data:
 
@@ -175,7 +189,7 @@ pnpm build
 pnpm format:check
 ```
 
-Financial tests cover incentive units/expiry, own dilution, existing allocation, decay, delay, zero/missing inputs, forecast cutoff, incomplete windows and error denominators. Integration tests cover atomic ingestion, idempotence, failure recovery, lease ownership, chain/mode isolation and CSV safety. They run offline with explicit fixtures; normal tests never claim to be a live-chain validation.
+Financial tests cover incentive units/expiry, own dilution, existing allocation, decay, delay, zero/missing inputs, forecast cutoff, incomplete windows and error denominators. Integration tests cover atomic ingestion, idempotence, failure recovery, lease ownership, chain/mode isolation, CSV safety, lossless storage migration, corrupt backup rejection, object-storage round trips and read-only HTTP behavior. They run offline with explicit fixtures; normal tests never claim to be a live-chain validation.
 
 | Directory             | Responsibility                                                                 |
 | --------------------- | ------------------------------------------------------------------------------ |

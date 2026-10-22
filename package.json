@@ -20,9 +20,16 @@
     "start": "node --env-file-if-exists=.env --import tsx server/index.ts --production",
     "format": "prettier --write src server tests scripts config *.json *.ts *.js *.md index.html pnpm-workspace.yaml .github",
     "format:check": "prettier --check src server tests scripts config *.json *.ts *.js *.md index.html pnpm-workspace.yaml .github",
-    "export:pages": "node --env-file-if-exists=.env --import tsx server/pages-export.ts"
+    "export:pages": "node --env-file-if-exists=.env --import tsx server/pages-export.ts",
+    "storage:report": "node --import tsx server/storage-cli.ts report",
+    "storage:migrate": "node --import tsx server/storage-cli.ts migrate",
+    "storage:backup": "node --import tsx server/storage-cli.ts backup",
+    "storage:restore": "node --import tsx server/storage-cli.ts restore",
+    "backup:r2": "node --env-file-if-exists=.env --import tsx server/object-backup-cli.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1155.0",
+    "@aws-sdk/lib-storage": "^3.1155.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "recharts": "^3.3.0",

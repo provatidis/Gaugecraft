@@ -4,6 +4,8 @@ import { dirname, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { Forecast, Mode, Run, Snapshot } from "../src/shared/types.js";
 import { forecast } from "../src/analysis/forecast.js";
+import { initialize } from "./storage-schema.js";
+import { decode, digest, encode } from "./storage-codec.js";
 export const databasePath = () =>
   resolve(process.env.GAUGECRAFT_DB || "data/gaugecraft.sqlite");
 export class Store {
@@ -12,27 +14,34 @@ export class Store {
   constructor(path = databasePath()) {
     if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
     this.db = new DatabaseSync(path);
-    this.db.exec(
-      "PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;",
-    );
-    this.db
-      .exec(`CREATE TABLE IF NOT EXISTS snapshots(mode TEXT NOT NULL,pool_id TEXT NOT NULL,bucket INTEGER NOT NULL,at INTEGER NOT NULL,chain_id INTEGER NOT NULL,block TEXT NOT NULL,body TEXT NOT NULL,PRIMARY KEY(mode,pool_id,bucket));
-      CREATE INDEX IF NOT EXISTS snapshot_history ON snapshots(mode,pool_id,at);
-      CREATE TABLE IF NOT EXISTS forecasts(id TEXT PRIMARY KEY,mode TEXT NOT NULL,pool_id TEXT NOT NULL,made_at INTEGER NOT NULL,due_at INTEGER NOT NULL,body TEXT NOT NULL);
-      CREATE INDEX IF NOT EXISTS forecast_dates ON forecasts(mode,made_at,due_at);
-      CREATE TABLE IF NOT EXISTS runs(id INTEGER PRIMARY KEY,startedAt INTEGER NOT NULL,finishedAt INTEGER,chainId INTEGER NOT NULL,mode TEXT NOT NULL,status TEXT NOT NULL,poolCount INTEGER NOT NULL DEFAULT 0,error TEXT);
-      CREATE TABLE IF NOT EXISTS leases(name TEXT PRIMARY KEY,until INTEGER NOT NULL);
-      CREATE TABLE IF NOT EXISTS decisions(mode TEXT NOT NULL,bucket INTEGER NOT NULL,at INTEGER NOT NULL,body TEXT NOT NULL,PRIMARY KEY(mode,bucket));
-      PRAGMA user_version=2;`);
-    const leaseColumns = this.db
-      .prepare("PRAGMA table_info(leases)")
-      .all()
-      .map((c) => c.name);
-    if (!leaseColumns.includes("owner"))
-      this.db.exec("ALTER TABLE leases ADD COLUMN owner TEXT;");
-    if (!leaseColumns.includes("pid"))
-      this.db.exec("ALTER TABLE leases ADD COLUMN pid INTEGER;");
+    this.db.exec("PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;");
+    try {
+      initialize(this.db);
+      this.db.exec("PRAGMA journal_mode=WAL");
+    } catch (error) {
+      this.db.close();
+      throw error;
+    }
   }
+  private snapshot(row: Record<string, unknown>, includeRaw = true): Snapshot {
+    const metrics = decode<Omit<Snapshot, "raw">>(row.body);
+    const evidence = includeRaw
+      ? this.db
+          .prepare("SELECT body FROM raw_evidence WHERE hash=?")
+          .get(String(row.raw_hash))
+      : null;
+    if (includeRaw && !evidence) throw new Error("Missing raw evidence");
+    return { ...metrics, raw: evidence ? decode(evidence.body) : {} };
+  }
+  private prediction(row: Record<string, unknown>): Forecast {
+    const result = decode<Omit<Forecast, "input">>(row.body);
+    const input = this.db
+      .prepare("SELECT body,raw_hash FROM snapshots WHERE input_hash=?")
+      .get(String(row.input_hash));
+    if (!input) throw new Error("Missing immutable forecast input");
+    return { ...result, input: this.snapshot(input) };
+  }
+
   close() {
     this.db.close();
   }
@@ -111,7 +120,7 @@ export class Store {
   }
   ingest(snapshots: Snapshot[], saveForecasts = true) {
     const insert = this.db.prepare(
-      "INSERT OR IGNORE INTO snapshots(mode,pool_id,bucket,at,chain_id,block,body) VALUES(?,?,?,?,?,?,?)",
+      "INSERT INTO snapshots(mode,pool_id,bucket,at,chain_id,block,body,input_hash,raw_hash) VALUES(?,?,?,?,?,?,?,?,?)",
     );
     let added = 0;
     this.db.exec("BEGIN IMMEDIATE");
@@ -130,20 +139,32 @@ export class Store {
           throw new Error("Pool identity mismatch");
         if (!["live", "demo"].includes(s.mode))
           throw new Error("Invalid source mode");
-        const body = JSON.stringify(s, (_k, v) => {
-          if (typeof v === "number" && !Number.isFinite(v))
-            throw new Error("Non-finite metric");
-          return v;
-        });
+        const bucket = Math.floor(s.observedAt / 1800);
+        if (
+          this.db
+            .prepare(
+              "SELECT 1 FROM snapshots WHERE mode=? AND pool_id=? AND bucket=?",
+            )
+            .get(s.mode, s.id, bucket)
+        )
+          continue;
+        const hash = digest(s);
+        const { raw, ...metrics } = s;
+        const rawHash = digest(raw);
+        this.db
+          .prepare("INSERT OR IGNORE INTO raw_evidence VALUES(?,?)")
+          .run(rawHash, encode(raw));
         const changes = Number(
           insert.run(
             s.mode,
             s.id,
-            Math.floor(s.observedAt / 1800),
+            bucket,
             s.observedAt,
             s.chainId,
             s.block,
-            body,
+            encode(metrics),
+            hash,
+            rawHash,
           ).changes,
         );
         added += changes;
@@ -153,8 +174,16 @@ export class Store {
             this.history(s.mode, s.id, s.observedAt - 48 * 3600, s.observedAt),
           );
           this.db
-            .prepare("INSERT OR IGNORE INTO forecasts VALUES(?,?,?,?,?,?)")
-            .run(f.id, f.mode, f.poolId, f.madeAt, f.dueAt, JSON.stringify(f));
+            .prepare("INSERT OR IGNORE INTO forecasts VALUES(?,?,?,?,?,?,?)")
+            .run(
+              f.id,
+              f.mode,
+              f.poolId,
+              f.madeAt,
+              f.dueAt,
+              encode({ ...f, input: undefined }),
+              hash,
+            );
         }
       }
       this.db.exec("COMMIT");
@@ -172,10 +201,10 @@ export class Store {
   ): Snapshot[] {
     return this.db
       .prepare(
-        "SELECT body FROM snapshots WHERE mode=? AND pool_id=? AND at>=? AND at<=? ORDER BY at",
+        "SELECT body,raw_hash FROM snapshots WHERE mode=? AND pool_id=? AND at>=? AND at<=? ORDER BY at",
       )
       .all(mode, id, from, to)
-      .map((r) => JSON.parse(r.body as string));
+      .map((r) => this.snapshot(r));
   }
   latestInWindow(
     mode: Mode,
@@ -185,64 +214,80 @@ export class Store {
   ): Snapshot | undefined {
     const row = this.db
       .prepare(
-        "SELECT body FROM snapshots WHERE mode=? AND pool_id=? AND at>=? AND at<=? ORDER BY at DESC LIMIT 1",
+        "SELECT body,raw_hash FROM snapshots WHERE mode=? AND pool_id=? AND at>=? AND at<=? ORDER BY at DESC LIMIT 1",
       )
       .get(mode, id, from, to);
-    return row ? JSON.parse(row.body as string) : undefined;
+    return row ? this.snapshot(row) : undefined;
   }
   latest(mode: Mode): Snapshot[] {
     return this.db
       .prepare(
-        "SELECT s.body FROM snapshots s JOIN (SELECT pool_id,MAX(at) AS at FROM snapshots WHERE mode=? GROUP BY pool_id) t ON s.pool_id=t.pool_id AND s.at=t.at WHERE s.mode=?",
+        "SELECT s.body,s.raw_hash FROM snapshots s JOIN (SELECT pool_id,MAX(at) AS at FROM snapshots WHERE mode=? GROUP BY pool_id) t ON s.pool_id=t.pool_id AND s.at=t.at WHERE s.mode=?",
       )
       .all(mode, mode)
-      .map((r) => JSON.parse(r.body as string));
+      .map((r) => this.snapshot(r));
+  }
+  *observations(
+    mode: Mode,
+    from = 0,
+    to = Number.MAX_SAFE_INTEGER,
+    includeRaw = true,
+  ): Generator<Snapshot> {
+    for (const row of this.db
+      .prepare(
+        "SELECT body,raw_hash FROM snapshots WHERE mode=? AND at>=? AND at<=? ORDER BY at,pool_id",
+      )
+      .iterate(mode, from, to))
+      yield this.snapshot(row, includeRaw);
   }
   all(mode: Mode): Snapshot[] {
-    return this.db
-      .prepare("SELECT body FROM snapshots WHERE mode=? ORDER BY at,pool_id")
-      .all(mode)
-      .map((r) => JSON.parse(r.body as string));
+    return [...this.observations(mode)];
+  }
+  *frozenForecasts(mode: Mode): Generator<Forecast> {
+    for (const row of this.db
+      .prepare("SELECT body,input_hash FROM forecasts WHERE mode=? ORDER BY id")
+      .iterate(mode))
+      yield this.prediction(row);
   }
   forecasts(mode: Mode, limit = 3000): Forecast[] {
     return this.db
       .prepare(
-        "SELECT body FROM forecasts WHERE mode=? ORDER BY made_at DESC LIMIT ?",
+        "SELECT body,input_hash FROM forecasts WHERE mode=? ORDER BY made_at DESC LIMIT ?",
       )
       .all(mode, limit)
-      .map((r) => JSON.parse(r.body as string));
+      .map((r) => this.prediction(r));
   }
   evaluationForecasts(mode: Mode, now: number, ids: string[]): Forecast[] {
     const recent = this.db
       .prepare(
-        "SELECT body FROM forecasts WHERE mode=? AND due_at>? ORDER BY made_at DESC LIMIT 250",
+        "SELECT body,input_hash FROM forecasts WHERE mode=? AND due_at>? ORDER BY made_at DESC LIMIT 250",
       )
       .all(mode, now);
     const mature = this.db
       .prepare(
-        "SELECT body FROM forecasts WHERE mode=? AND due_at<=? ORDER BY made_at DESC LIMIT 500",
+        "SELECT body,input_hash FROM forecasts WHERE mode=? AND due_at<=? ORDER BY made_at DESC LIMIT 500",
       )
       .all(mode, now);
     const selected = ids.flatMap((id) => {
       const r = this.db
-        .prepare("SELECT body FROM forecasts WHERE mode=? AND id=?")
+        .prepare("SELECT body,input_hash FROM forecasts WHERE mode=? AND id=?")
         .get(mode, id);
       return r ? [r] : [];
     });
-    const parsed = [...recent, ...mature, ...selected].map(
-      (r) => JSON.parse(r.body as string) as Forecast,
+    const parsed = [...recent, ...mature, ...selected].map((r) =>
+      this.prediction(r),
     );
     return [...new Map(parsed.map((f) => [f.id, f])).values()];
   }
   latestForecasts(mode: Mode): Map<string, Forecast> {
     const rows = this.db
       .prepare(
-        "SELECT f.body FROM forecasts f JOIN (SELECT pool_id,MAX(made_at) AS at FROM forecasts WHERE mode=? GROUP BY pool_id) t ON f.pool_id=t.pool_id AND f.made_at=t.at WHERE f.mode=?",
+        "SELECT f.body,f.input_hash FROM forecasts f JOIN (SELECT pool_id,MAX(made_at) AS at FROM forecasts WHERE mode=? GROUP BY pool_id) t ON f.pool_id=t.pool_id AND f.made_at=t.at WHERE f.mode=?",
       )
       .all(mode, mode);
     return new Map(
       rows.map((r) => {
-        const f = JSON.parse(r.body as string) as Forecast;
+        const f = this.prediction(r);
         return [f.poolId, f];
       }),
     );

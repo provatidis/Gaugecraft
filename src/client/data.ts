@@ -1,16 +1,17 @@
 import type { HistoryPoint, Mode } from "../shared/types.js";
 
-export const hosted = import.meta.env.VITE_DATA_MODE === "static";
+const apiOrigin = (import.meta.env.VITE_API_ORIGIN || "").replace(/\/$/, "");
+export const hosted = !apiOrigin && import.meta.env.VITE_DATA_MODE === "static";
 export const assetUrl = (path: string) => `${import.meta.env.BASE_URL}${path}`;
 export const exportUrl = (mode: Mode) =>
   hosted
     ? assetUrl(`data/${mode}/observations.csv`)
-    : `/api/export.csv?mode=${mode}`;
+    : `${apiOrigin}/api/export.csv?mode=${mode}`;
 
 export async function get<T>(url: string, signal?: AbortSignal): Promise<T> {
   const route = new URL(url, window.location.origin);
   const mode = route.searchParams.get("mode") === "demo" ? "demo" : "live";
-  let target = url;
+  let target = `${apiOrigin}${url}`;
   if (hosted) {
     const resource = route.pathname.split("/").at(-1);
     if (resource === "history") {

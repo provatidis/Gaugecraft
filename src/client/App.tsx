@@ -119,7 +119,7 @@ interface State {
   markets: MarketRow[];
   runs: Run[];
   collectorEnabled: boolean;
-  collectionKind?: "github-actions";
+  collectionKind?: "github-actions" | "persistent-service";
   configuredChains: number[];
 }
 const metricInfo: Record<string, string> = {
@@ -458,7 +458,7 @@ export default function App() {
                 title={
                   hosted
                     ? "Published observations from the last 30 days"
-                    : "All stored observations"
+                    : "Stored observations from the last 30 days; use the CLI to export full history"
                 }
               >
                 ↓ Export observations
@@ -603,7 +603,7 @@ export default function App() {
                 {state.collectionKind === "github-actions"
                   ? "Public chain observations are refreshed by GitHub Actions, scheduled twice an hour. Runs may be delayed or fail; the retrieval timestamp shows actual freshness. History is retained between runs. Your personal inputs never enter the collector."
                   : state.collectorEnabled
-                    ? "Collection runs every 30 minutes while the local server is running."
+                    ? "Collection runs every 30 minutes while the service is running. Retrieval timestamps show actual freshness."
                     : "Background collection is disabled for this server."}
               </p>
               {mode === "live" && (

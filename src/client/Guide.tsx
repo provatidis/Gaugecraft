@@ -10,8 +10,8 @@ const help: Record<ResearchPage, { title: string; paragraphs: string[] }> = {
   markets: {
     title: "Pool rewards are shared. How do I estimate my earnings?",
     paragraphs: [
-      "Est. rewards 48h is the pool-wide total shared by all allocators. Use it to shortlist pools, then open a pool and simulate your own share after dilution. Market Stake APR uses allocation power valued at the AERO spot estimate; it is not your personal capital APR.",
-      "Eligible fees and volume are historical observations. Read their actual window lengths before comparing pools: eight hours observed is not a measured 48-hour total. A dash means unknown, not zero.",
+      "Markets starts with modeled earnings for your intended allocation power, or 1,000 additional reference power if blank. Own dilution is included. Switch to Stress-case earnings or Pool-wide rewards when useful; the sort is remembered. Pool rewards are shared totals, not your individual earnings.",
+      "History-based estimates and constant-condition baselines are sorted in separate evidence groups. Comparable earnings require near-full 48-hour fee windows, current data and complete prices. Partial observations remain visible for research, with earnings withheld. A dash means unavailable, not zero.",
     ],
   },
   analysis: {
@@ -25,14 +25,14 @@ const help: Record<ResearchPage, { title: string; paragraphs: string[] }> = {
     title: "When is this a persistence ranking?",
     paragraphs: [
       "Insufficient history means there is not enough evidence to rank persistence. The initial list is a baseline comparison. Qualification needs roughly 48 hours, at least 80 priced fee observations, no gap over 75 minutes and a near-full fee window. Stale pools are excluded.",
-      "Qualified pools are ranked for 1,000 additional power, including your own dilution, under a 50% decline in forecast fees and 50% more competing power on top of projected allocation. Scheduled incentives retain their modeled value. This is a stress assumption, not a confidence interval. Simulate your own size; a larger allocation can change the ordering.",
+      "Qualified pools are ranked for the power selected in Markets, or 1,000 additional reference power, including your own dilution, under a 50% decline in forecast fees and 50% more competing power on top of projected allocation. Scheduled incentives retain their modeled value. This is a stress assumption, not a confidence interval. Simulate your own size; a larger allocation can change the ordering.",
     ],
   },
   simulator: {
     title: "Allocation power, existing power and capital: what goes where?",
     paragraphs: [
       "Allocation power is your intended total power in this pool, not dollars. Already allocated is your power included in its current total. To increase from 10,000 to 15,000 power, enter 15,000 and 10,000 respectively. Stake value in USD is optional and only supplies the denominator for personal capital APR.",
-      "The model removes your existing power before adding your intended power, then integrates your share of revenue over 48 hours. Inputs carry between pools: review existing power and capital whenever you switch. Blank remaining days models perpetual power; activation delay is an assumption, not a check of eligibility.",
+      "The model removes your existing power before adding your intended power, then integrates your share of revenue over 48 hours. Intended power is shared with Markets and Opportunities. Existing power is saved separately per pool and data mode. Capital and timing assumptions still carry between pools; review them whenever you switch. Blank remaining days models perpetual power; activation delay is an assumption, not a check of eligibility.",
       "Competition scenarios start from current other allocation, without automatically applying the Opportunities allocation-growth forecast. The revenue-down case halves all modeled USD revenue, including incentives. Baseline means no new competition; it is not a prediction. Read the 48-hour earnings before the annualized APR.",
     ],
   },
@@ -88,7 +88,7 @@ export function GettingStarted({
       <ol className="starter-steps">
         <li>
           <b>Find promising pools</b>
-          <span>Start with pool-wide rewards in Markets.</span>
+          <span>Compare earnings for your allocation in Markets.</span>
         </li>
         <li>
           <b>Investigate sustainability</b>
@@ -100,7 +100,7 @@ export function GettingStarted({
         </li>
       </ol>
       <button className="text-link" onClick={onGuide}>
-        Read the 60-second guide →
+        Read the quick guide →
       </button>
     </section>
   );
@@ -120,7 +120,7 @@ const steps: {
   },
   {
     title: "Build a shortlist",
-    text: "Markets starts with the largest estimated pool rewards. Filter by network, star candidates and compare revenue in Returns view. Use All metrics for volume and six-hour changes. Check network and pool address, not just token symbols.",
+    text: "Enter intended power in Markets, then compare modeled earnings within each evidence group. Try stress earnings or pool-wide rewards as alternative sorts. Filter by network and star candidates. Partial fee windows are visible but do not receive a comparable earnings estimate.",
     page: "markets",
     action: "Find pools",
   },
@@ -132,13 +132,13 @@ const steps: {
   },
   {
     title: "Simulate your intended size",
-    text: "Enter your intended total allocation power and any power already in the pool. Add capital in USD only for personal APR. Compare 48-hour earnings across competition and revenue scenarios. Review inputs when changing pools.",
+    text: "Enter your intended total allocation power and any power already in the pool. Intended power carries from Markets; existing power is remembered per pool. Add capital in USD only for personal APR. Compare competition and revenue scenarios, and review timing and capital assumptions when switching pools.",
     page: "simulator",
     action: "Open Simulator",
   },
   {
     title: "Use rankings when evidence is sufficient",
-    text: "Opportunities ranks qualified pools by stressed earnings for 1,000 additional power. Until enough history exists, it shows baseline comparisons. Insufficient history is a missing-evidence state, not a negative score.",
+    text: "Opportunities ranks qualified pools by stressed earnings for your selected power. Until enough history exists, it shows baseline comparisons. Insufficient history is a missing-evidence state, not a negative score.",
     page: "opportunities",
     action: "Open Opportunities",
   },
@@ -161,7 +161,7 @@ export function Guide({ navigate }: { navigate: Navigate }) {
           <span className="eyebrow">START WITH THIS DISTINCTION</span>
           <h2 id="guide-principle-title">Pool rewards ≠ your earnings</h2>
           <p>
-            <b>Est. rewards 48h is shared by all allocators.</b> Your earnings
+            <b>Pool rewards are shared by all allocators.</b> Your earnings
             depend on your share after dilution, revenue timing and competing
             allocation.
           </p>
@@ -179,7 +179,7 @@ export function Guide({ navigate }: { navigate: Navigate }) {
             Follow the evidence from a shortlist to a scenario you can explain.
           </p>
         </div>
-        <span className="badge">About a minute to read</span>
+        <span className="badge">A quick orientation</span>
       </div>
       <ol className="guide-steps">
         {steps.map((step) => (

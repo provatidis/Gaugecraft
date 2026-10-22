@@ -1249,15 +1249,14 @@ footer a {
   scrollbar-width: thin;
 }
 .markets-table {
-  min-width: 1430px;
+  min-width: 1870px;
   border-collapse: separate;
   border-spacing: 0;
 }
 .markets-table.focus-view {
-  min-width: 910px;
+  min-width: 1290px;
 }
-.markets-table.focus-view th:nth-child(n + 8),
-.markets-table.focus-view td:nth-child(n + 8) {
+.markets-table.focus-view .extra-metric {
   display: none;
 }
 .markets-table thead th {
@@ -2166,4 +2165,177 @@ footer a {
     animation: none !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Allocation-size comparisons */
+.allocation-size {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  background: #fff;
+  border: 1px solid #d5e3de;
+  border-radius: 8px;
+}
+.allocation-size label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  color: #38584d;
+  font-size: 12px;
+  font-weight: 550;
+}
+.allocation-size input {
+  width: 180px;
+  min-height: 40px;
+  font-size: 16px;
+  border: 1px solid #b6ccc3;
+  border-radius: 5px;
+  padding: 8px 10px;
+  color: #24353d;
+  background: #fff;
+}
+.allocation-size input[aria-invalid="true"] {
+  border-color: #a2604c;
+}
+.allocation-size > div {
+  flex: 1;
+  min-width: 220px;
+}
+.allocation-size b {
+  font-size: 13px;
+  font-weight: 550;
+  color: #38584d;
+}
+.allocation-size p {
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 6px 0 0;
+}
+.market-sort {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #526a73;
+}
+.market-sort select {
+  max-width: 210px;
+}
+.market-overview {
+  margin-bottom: 18px;
+  color: #526a73;
+  font-size: 12px;
+}
+.market-overview summary {
+  cursor: pointer;
+  padding: 8px 0;
+}
+.market-overview .stat-grid {
+  margin-top: 10px;
+  margin-bottom: 0;
+}
+.markets-table .personal-earnings {
+  min-width: 145px;
+}
+.markets-table .personal-stress {
+  min-width: 155px;
+}
+.markets-table .evidence-cell {
+  min-width: 190px;
+}
+.markets-table .evidence-cell .badge {
+  color: #835f1e;
+  background: #fcf5e8;
+}
+.markets-table .evidence-cell .badge.good {
+  color: #356b50;
+  background: #edf6ef;
+}
+.markets-table .personal-earnings small {
+  white-space: normal;
+  max-width: 180px;
+  color: #566a73;
+  line-height: 1.5;
+}
+.markets-table .personal-stress small {
+  white-space: normal;
+  max-width: 155px;
+  color: #566a73;
+}
+.market-view-bar .text-link {
+  display: block;
+  padding: 6px 0 0;
+}
+.simulation-reference {
+  border-left: 2px solid #c4d9cd;
+  padding-left: 10px;
+}
+@media (max-width: 600px) {
+  .allocation-size {
+    padding: 15px;
+    gap: 12px;
+  }
+  .allocation-size label,
+  .allocation-size input {
+    width: 100%;
+  }
+  .allocation-size > div {
+    min-width: 0;
+    flex-basis: 100%;
+  }
+  .market-panel .panel-header {
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .market-sort {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .market-sort select,
+  .toolbar select {
+    font-size: 16px;
+    min-width: 0;
+    max-width: 100%;
+  }
+  .market-panel .toolbar select {
+    flex: 1 1 145px;
+  }
+  .market-panel .toolbar .button {
+    flex: 0 0 auto;
+  }
+  .market-scroll {
+    --pool-width: 145px;
+  }
+  .markets-table .pair {
+    min-width: 125px;
+  }
+  .markets-table .personal-earnings {
+    min-width: 130px;
+  }
+}
+
+.comparison-assumptions {
+  flex-basis: 100%;
+  font-size: 12px;
+  color: #526a73;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+.comparison-assumptions summary {
+  cursor: pointer;
+}
+.comparison-assumptions p {
+  max-width: 850px;
+  line-height: 1.7;
+}
+
+.earnings .market-estimate-note {
+  max-width: 560px;
+  margin: 14px auto 0;
+  font-size: 12px;
+  line-height: 1.65;
+  color: #566a73;
 }

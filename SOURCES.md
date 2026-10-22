@@ -139,3 +139,20 @@ Validation includes live reads across all seven configured networks, 22 offline 
 The hosted build reads static JSON exports from this collector, not a new Aero API. GitHub Actions is scheduled twice per hour, with actual source-block and retrieval timestamps retained. [Pages custom workflows](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages) provide the deployment mechanism. [Scheduled workflow limits](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule) allow delays and inactivity-based disablement; the UI never equates scheduled time with a successful observation.
 
 SQLite history and frozen forecasts persist in the repository's `collector-state` prerelease. Uploads use unique names, size/digest checks and three retained complete copies; a failed restore stops publication. The one-time launch seed contains only genuine public observations from this collector, with a SHA-256 and coverage summary in `config/launch-history.json`. Static charts and CSV are limited to 30 days; full history remains in the database. Synthetic fixtures are stored and published under their separate `demo` namespace. Personal simulator inputs never leave browser storage.
+
+## Allocation-size comparisons in Markets
+
+Markets defaults to modeled earnings at the user's intended total power, or **1,000 additional reference power** when no size is entered. The existing `transparent-v1` forecast ledger and Performance benchmarks remain immutable and use their original 1,000-power reference. Personal power is never sent to the server or saved in a forecast.
+
+For current pool allocation `A`, saved existing personal allocation `E`, intended total `P` and forecast allocation `F`:
+
+```text
+growth = max(1, F / A) when A > 0, otherwise 1
+other = (A - E) × growth
+earnings = P / (other + P) × (forecast fees + scheduled incentives)
+stress = P / (1.5 × other + P) × (0.5 × forecast fees + scheduled incentives)
+```
+
+This compares immediate, constant-power allocations. Scheduled incentives already stop at their actual expiry in the frozen forecast. No new program or USD incentive renewal is assumed. The stress case holds incentive USD value unchanged and is not a confidence interval. Simulator separately models timing and decay and applies competition shocks to current other allocation rather than the forecast.
+
+Only active, fresh pools with complete nonnegative inputs and a 47–49-hour source fee window receive comparable earnings. Short windows are not extrapolated. History-based estimates and full-window baselines are sorted within separate evidence groups, with missing or partial estimates following unranked. Evidence groups are not a claim that every history-based candidate is better than every baseline. Existing power is browser-local and keyed by source mode, chain and pool; legacy shared existing-power inputs cannot be safely assigned and must be re-entered. Blank intended power ignores personal existing allocations and restores the reference scenario.

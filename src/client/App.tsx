@@ -27,6 +27,12 @@ import {
 import { get, assetUrl, exportUrl, hosted } from "./data.js";
 import { dataHealth, isFresh } from "../analysis/freshness.js";
 import {
+  allocationEarnings,
+  compareEarnings,
+  EVIDENCE_LABELS,
+} from "../analysis/earnings.js";
+import { AllocationSize } from "./AllocationSize.js";
+import {
   ContextHelp,
   GettingStarted,
   Guide,
@@ -40,6 +46,15 @@ const money = (n: Maybe | undefined, compact = false) =>
         currency: "USD",
         maximumFractionDigits: n < 10 ? 2 : 0,
         ...(compact ? { notation: "compact" as const } : {}),
+      }).format(n);
+const earningsMoney = (n: Maybe | undefined) =>
+  n == null
+    ? "—"
+    : new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
       }).format(n);
 const number = (n: Maybe | undefined, compact = false) =>
   n == null
@@ -73,6 +88,31 @@ function useLocal<T>(key: string, fallback: T): [T, (value: T) => void] {
     },
   ];
 }
+interface AllocationSettings {
+  power: string;
+  setPower: (power: string) => void;
+  existing: Record<string, string>;
+  setExisting: (values: Record<string, string>) => void;
+}
+function initialPower() {
+  try {
+    const prior = JSON.parse(
+      localStorage.getItem("gc-simulator") ?? "{}",
+    ).power;
+    return typeof prior === "string" && prior !== "1000" ? prior : "";
+  } catch {
+    return "";
+  }
+}
+const positionKey = (s: Snapshot) => `${s.mode}:${s.id}`;
+function comparison(row: MarketRow, settings: AllocationSettings) {
+  const reference = settings.power.trim() === "";
+  return allocationEarnings(
+    row,
+    reference ? 1000 : Number(settings.power),
+    reference ? 0 : Number(settings.existing[positionKey(row.snapshot)] ?? "0"),
+  );
+}
 interface State {
   mode: Mode;
   now: number;
@@ -84,6 +124,12 @@ interface State {
 }
 const metricInfo: Record<string, string> = {
   pool: "Chain ID plus pool contract address uniquely identifies each market. Token symbols alone are not unique.",
+  earnings:
+    "Modeled USD earnings for the entered total power (or 1,000 additional reference power), including own dilution. History-based estimates and full-window baselines are sorted separately. Assumes immediate allocation and constant own power; use Simulator for timing and decay.",
+  stress:
+    "Same power, with forecast fees reduced 50% and other projected allocation increased 50%. Scheduled incentive USD value is unchanged. A stress assumption, not a confidence interval.",
+  evidence:
+    "History-based estimates meet the persistence coverage requirements. Baselines hold current conditions constant. Partial fee windows cannot support a comparable 48-hour earnings estimate.",
   stakeApr:
     "Annualized pool revenue estimate ÷ (current reward allocation power × AERO spot price) × 182.5 × 100. This is Stake APR, not LP APR or your personal capital APR.",
   rewards48hUsd:
@@ -158,6 +204,15 @@ export default function App() {
     [refresh, setRefresh] = useState(0),
     [selected, setSelected] = useState("");
   const [watch, setWatch] = useLocal<string[]>("gc-watchlist", []);
+  const [power, setPower] = useLocal<string>(
+    "gc-allocation-power",
+    initialPower(),
+  );
+  const [existing, setExisting] = useLocal<Record<string, string>>(
+    "gc-existing-by-pool",
+    {},
+  );
+  const allocationSettings = { power, setPower, existing, setExisting };
   const [guideDismissed, setGuideDismissed] = useLocal<boolean>(
     "gc-guide-dismissed",
     false,
@@ -454,7 +509,9 @@ export default function App() {
               }}
             />
           )}
-          {page !== "guide" && <ContextHelp page={page} onGuide={showGuide} />}
+          {page !== "guide" && page !== "markets" && (
+            <ContextHelp page={page} onGuide={showGuide} />
+          )}
           {page === "guide" ? (
             <Guide navigate={navigate} />
           ) : loading && !state ? (
@@ -492,10 +549,15 @@ export default function App() {
                   open={open}
                   watch={watch}
                   setWatch={setWatch}
+                  allocationSettings={allocationSettings}
                 />
               )}
               {page === "opportunities" && (
-                <Opportunities rows={rows} open={open} />
+                <Opportunities
+                  rows={rows}
+                  open={open}
+                  allocationSettings={allocationSettings}
+                />
               )}
               {page === "analysis" && current && (
                 <Analysis
@@ -508,7 +570,12 @@ export default function App() {
                 />
               )}
               {page === "simulator" && current && (
-                <Simulator row={current} rows={rows} select={setSelected} />
+                <Simulator
+                  row={current}
+                  rows={rows}
+                  select={setSelected}
+                  allocationSettings={allocationSettings}
+                />
               )}
               {page === "performance" && (
                 <Performance mode={mode} rows={rows} revision={revision} />
@@ -598,18 +665,36 @@ function Markets({
   open,
   watch,
   setWatch,
+  allocationSettings,
 }: {
   rows: MarketRow[];
   open: (r: MarketRow, p?: Page) => void;
   watch: string[];
   setWatch: (s: string[]) => void;
+  allocationSettings: AllocationSettings;
 }) {
   const [search, setSearch] = useState(""),
     [chain, setChain] = useState("all"),
     [starred, setStarred] = useState(false),
-    [sort, setSort] = useState("rewards48hUsd"),
-    [desc, setDesc] = useState(true),
     [page, setPage] = useState(0);
+  const [sorting, setSorting] = useLocal("gc-market-sort", {
+    key: "earnings",
+    descending: true,
+  });
+  const sort = sorting.key,
+    desc = sorting.descending;
+  const [evidence, setEvidence] = useState("all");
+  const estimates = useMemo(
+    () =>
+      new Map(
+        rows.map((r) => [r.snapshot.id, comparison(r, allocationSettings)]),
+      ),
+    [rows, allocationSettings.power, allocationSettings.existing],
+  );
+  const personalSort = sort === "earnings" || sort === "stress";
+  const comparableCount = [...estimates.values()].filter(
+    (e) => e.earnings !== null,
+  ).length;
   const [view, setView] = useLocal<"focus" | "all">("gc-market-view", "focus");
   const active = rows.filter((r) => r.snapshot.active),
     knownRewards = active.filter((r) => r.snapshot.rewards48hUsd !== null),
@@ -629,6 +714,7 @@ function Markets({
         .filter((r) => {
           const s = r.snapshot;
           return (
+            (evidence === "all" || estimates.get(s.id)?.basis === evidence) &&
             (chain === "all" || s.chain === chain) &&
             (!starred || watch.includes(s.id)) &&
             `${s.token0.symbol} ${s.token1.symbol} ${s.address} ${s.chain}`
@@ -637,6 +723,16 @@ function Markets({
           );
         })
         .sort((a, b) => {
+          if (sort === "earnings" || sort === "stress") {
+            return (
+              compareEarnings(
+                estimates.get(a.snapshot.id)!,
+                estimates.get(b.snapshot.id)!,
+                sort,
+                desc,
+              ) || a.snapshot.id.localeCompare(b.snapshot.id)
+            );
+          }
           const value = (r: MarketRow): number | string | null =>
             sort === "pool"
               ? `${r.snapshot.token0.symbol}/${r.snapshot.token1.symbol}`
@@ -656,7 +752,7 @@ function Markets({
               : av - Number(bv)) * (desc ? -1 : 1)
           );
         }),
-    [rows, chain, starred, watch, search, sort, desc],
+    [rows, chain, starred, watch, search, sort, desc, evidence, estimates],
   );
   const currentPage = Math.min(
     page,
@@ -664,69 +760,85 @@ function Markets({
   );
   const columns = [
     ["pool", "Pool"],
-    ["stakeApr", "Stake APR"],
-    ["rewards48hUsd", "Est. rewards 48h"],
+    ["earnings", "Earnings / 48h"],
+    ["stress", "Stress / 48h"],
+    ["evidence", "Evidence"],
+    ["rewards48hUsd", "Pool rewards / 48h"],
     ["eligibleFees48hUsd", "Eligible fees"],
     ["incentives48hUsd", "Incentives 48h"],
     ["allocation", "Allocation power"],
+    ["stakeApr", "Stake APR"],
     ["tvlUsd", "TVL"],
     ["volume48hUsd", "Volume · observed"],
     ["aprChange", "APR Δ 6h"],
     ["allocationChange", "Allocation Δ 6h"],
   ];
   function sortBy(key: string) {
-    if (sort === key) setDesc(!desc);
-    else {
-      setSort(key);
-      setDesc(true);
-    }
+    setSorting({ key, descending: sort === key ? !desc : true });
     setPage(0);
   }
   function clearFilters() {
     setSearch("");
     setChain("all");
     setStarred(false);
+    setEvidence("all");
     setPage(0);
   }
   return (
     <>
-      <div className="stat-grid">
-        <Stat
-          label="Allocation markets"
-          value={number(active.length)}
-          detail={`${rows.length - active.length} inactive · chain-aware identities`}
-        />
-        <Stat
-          label="Pool rewards · next 48h"
-          value={money(
-            knownRewards.length
-              ? knownRewards.reduce((a, r) => a + r.snapshot.rewards48hUsd!, 0)
-              : null,
-            true,
-          )}
-          detail={`Estimate · ${knownRewards.length}/${active.length} pools priced`}
-        />
-        <Stat
-          label="Tracked liquidity"
-          value={money(
-            knownTvl.length
-              ? knownTvl.reduce((a, r) => a + r.snapshot.tvlUsd!, 0)
-              : null,
-            true,
-          )}
-          detail={`Spot estimate · ${knownTvl.length}/${active.length} pools priced`}
-        />
-        <Stat
-          label="Persistence evidence"
-          value={`${ready.length} pools`}
-          detail={
-            ready.length
-              ? "Meet the minimum history gate"
-              : "Insufficient history · collecting"
-          }
-          highlight
-        />
-      </div>
+      <AllocationSize
+        value={allocationSettings.power}
+        onChange={(value) => {
+          allocationSettings.setPower(value);
+          setPage(0);
+        }}
+      />
+      <details className="market-overview">
+        <summary>
+          Market overview · {active.length} active pools · {ready.length} with
+          persistence evidence
+        </summary>
+        <div className="stat-grid">
+          <Stat
+            label="Allocation markets"
+            value={number(active.length)}
+            detail={`${rows.length - active.length} inactive · chain-aware identities`}
+          />
+          <Stat
+            label="Pool rewards · next 48h"
+            value={money(
+              knownRewards.length
+                ? knownRewards.reduce(
+                    (a, r) => a + r.snapshot.rewards48hUsd!,
+                    0,
+                  )
+                : null,
+              true,
+            )}
+            detail={`Estimate · ${knownRewards.length}/${active.length} pools priced`}
+          />
+          <Stat
+            label="Tracked liquidity"
+            value={money(
+              knownTvl.length
+                ? knownTvl.reduce((a, r) => a + r.snapshot.tvlUsd!, 0)
+                : null,
+              true,
+            )}
+            detail={`Spot estimate · ${knownTvl.length}/${active.length} pools priced`}
+          />
+          <Stat
+            label="Persistence evidence"
+            value={`${ready.length} pools`}
+            detail={
+              ready.length
+                ? "Meet the minimum history gate"
+                : "Insufficient history · collecting"
+            }
+            highlight={ready.length > 0}
+          />
+        </div>
+      </details>
       <section className="panel market-panel">
         <div className="panel-header">
           <div>
@@ -734,20 +846,32 @@ function Markets({
               Markets <span className="count">{rows.length}</span>
             </h2>
             <p>
-              Est. rewards 48h is the pool-wide total. Simulate your share for
-              personal earnings.
+              {allocationSettings.power.trim() === ""
+                ? "Earnings for 1,000 additional reference power."
+                : "Earnings for your intended total power in each pool."}{" "}
+              Pool rewards remain shared totals.
             </p>
           </div>
-          <div className="legend">
-            <span>
-              <i className="observed" />
-              Observed inputs
-            </span>
-            <span>
-              <i className="estimated" />
-              Derived estimates
-            </span>
-          </div>
+          <label className="market-sort">
+            Sort by
+            <select
+              aria-label="Sort markets"
+              value={sort}
+              onChange={(e) => {
+                setSorting({ key: e.target.value, descending: true });
+                setPage(0);
+              }}
+            >
+              <option value="earnings">Estimated earnings</option>
+              <option value="stress">Stress-case earnings</option>
+              <option value="rewards48hUsd">Pool-wide rewards</option>
+              {!["earnings", "stress", "rewards48hUsd"].includes(sort) && (
+                <option value={sort}>
+                  {columns.find((c) => c[0] === sort)?.[1] ?? sort}
+                </option>
+              )}
+            </select>
+          </label>
         </div>
         <div className="toolbar">
           <label className="search">
@@ -775,6 +899,20 @@ function Markets({
               <option key={c}>{c}</option>
             ))}
           </select>
+          <select
+            aria-label="Filter evidence"
+            value={evidence}
+            onChange={(e) => {
+              setEvidence(e.target.value);
+              setPage(0);
+            }}
+          >
+            <option value="all">All evidence groups</option>
+            <option value="history">History-based estimates</option>
+            <option value="baseline">Full-window baselines</option>
+            <option value="partial">Partial fee windows</option>
+            <option value="unavailable">Unavailable estimates</option>
+          </select>
           <button
             className={starred ? "button filter selected" : "button filter"}
             aria-pressed={starred}
@@ -785,7 +923,7 @@ function Markets({
           >
             ☆ Watchlist <span>{watch.length}</span>
           </button>
-          {(search || chain !== "all" || starred) && (
+          {(search || chain !== "all" || starred || evidence !== "all") && (
             <button className="clear-filters" onClick={clearFilters}>
               Clear filters
             </button>
@@ -793,13 +931,25 @@ function Markets({
         </div>
         <div className="market-view-bar">
           <p>
-            {partialWindows > 0 ? (
+            {personalSort
+              ? "Sorted within evidence groups: history-based estimates, then full-window baselines. Partial or unavailable estimates follow without an earnings rank."
+              : "Pool rewards are shared totals. Use earnings sorts to account for your allocation size."}
+            {comparableCount === 0 && (
               <>
-                <b>{partialWindows} pools with partial fee windows.</b> Values
-                below show the actual observed duration.
+                {" "}
+                <b>No comparable 48h earnings yet.</b> Check fee windows or use
+                pool-wide rewards to shortlist.
               </>
-            ) : (
-              "Fees and volume use each pool’s observed source window."
+            )}
+            {comparableCount === 0 && sort !== "rewards48hUsd" && (
+              <button
+                className="text-link"
+                onClick={() =>
+                  setSorting({ key: "rewards48hUsd", descending: true })
+                }
+              >
+                Show largest pool rewards →
+              </button>
             )}
           </p>
           <div
@@ -814,14 +964,14 @@ function Markets({
                 setView("focus");
                 if (
                   [
+                    "stakeApr",
                     "tvlUsd",
                     "volume48hUsd",
                     "aprChange",
                     "allocationChange",
                   ].includes(sort)
                 ) {
-                  setSort("rewards48hUsd");
-                  setDesc(true);
+                  setSorting({ key: "earnings", descending: true });
                 }
               }}
             >
@@ -851,6 +1001,17 @@ function Markets({
                 {columns.map(([key, label]) => (
                   <th
                     key={key}
+                    className={
+                      [
+                        "stakeApr",
+                        "tvlUsd",
+                        "volume48hUsd",
+                        "aprChange",
+                        "allocationChange",
+                      ].includes(key)
+                        ? "extra-metric"
+                        : undefined
+                    }
                     aria-sort={
                       sort === key
                         ? desc
@@ -859,12 +1020,18 @@ function Markets({
                         : "none"
                     }
                   >
-                    <button onClick={() => sortBy(key)}>
+                    {key === "evidence" ? (
                       <Info name={key} label={label} />
-                      {sort === key ? (
-                        <span className="sort-active">{desc ? "↓" : "↑"}</span>
-                      ) : null}
-                    </button>
+                    ) : (
+                      <button onClick={() => sortBy(key)}>
+                        <Info name={key} label={label} />
+                        {sort === key ? (
+                          <span className="sort-active">
+                            {desc ? "↓" : "↑"}
+                          </span>
+                        ) : null}
+                      </button>
+                    )}
                   </th>
                 ))}
               </tr>
@@ -874,6 +1041,7 @@ function Markets({
                 .slice(currentPage * 25, (currentPage + 1) * 25)
                 .map((r) => {
                   const s = r.snapshot;
+                  const estimate = estimates.get(s.id)!;
                   return (
                     <tr key={s.id} className={!s.active ? "inactive" : ""}>
                       <td className="star-col">
@@ -900,19 +1068,45 @@ function Markets({
                           <Badge tone="warn">Stale observation</Badge>
                         )}
                       </td>
-                      <td className="apr">
+                      <td
+                        className="emphasis personal-earnings"
+                        title={estimate.reason}
+                      >
                         <button
                           className="metric-button"
-                          title={metricInfo.stakeApr}
                           onClick={() => open(r, "simulator")}
+                          aria-label={`Simulate ${s.token0.symbol}/${s.token1.symbol} ${s.chain} allocation`}
                         >
-                          {pct(s.stakeApr)}
+                          {earningsMoney(estimate.earnings)}
                         </button>
-                        <small>power APR · est.</small>
+                        <small>
+                          {estimate.basis === "baseline"
+                            ? "Baseline"
+                            : estimate.basis === "history"
+                              ? "Modeled estimate"
+                              : estimate.basis === "partial"
+                                ? "Needs full fee window"
+                                : estimate.reason}
+                        </small>
+                      </td>
+                      <td className="personal-stress" title={metricInfo.stress}>
+                        {earningsMoney(estimate.stress)}
+                        <small>−50% fees · +50% competition</small>
+                      </td>
+                      <td className="evidence-cell" title={estimate.reason}>
+                        <Badge
+                          tone={estimate.basis === "history" ? "good" : "warn"}
+                        >
+                          {EVIDENCE_LABELS[estimate.basis]}
+                        </Badge>
+                        <small>
+                          {((s.windowEnd - s.windowStart) / 3600).toFixed(1)}h
+                          fees observed
+                        </small>
                       </td>
                       <td className="emphasis">
                         {money(s.rewards48hUsd)}
-                        <small>shared pool total</small>
+                        <small>shared by all allocators</small>
                       </td>
                       <td>
                         {money(s.eligibleFees48hUsd)}
@@ -945,8 +1139,18 @@ function Markets({
                         {number(s.allocation, true)}
                         <small>reward supply</small>
                       </td>
-                      <td>{money(s.tvlUsd, true)}</td>
-                      <td>
+                      <td className="apr extra-metric">
+                        <button
+                          className="metric-button"
+                          title={metricInfo.stakeApr}
+                          onClick={() => open(r, "simulator")}
+                        >
+                          {pct(s.stakeApr)}
+                        </button>
+                        <small>power APR · est.</small>
+                      </td>
+                      <td className="extra-metric">{money(s.tvlUsd, true)}</td>
+                      <td className="extra-metric">
                         {money(s.volume48hUsd, true)}
                         <small>
                           {Math.max(
@@ -957,24 +1161,14 @@ function Markets({
                         </small>
                       </td>
                       <td
-                        className={
-                          r.aprChange === null
-                            ? ""
-                            : r.aprChange >= 0
-                              ? "positive"
-                              : "negative"
-                        }
+                        className={`extra-metric ${r.aprChange === null ? "" : r.aprChange >= 0 ? "positive" : "negative"}`}
                       >
                         {r.aprChange === null
                           ? "—"
                           : `${r.aprChange >= 0 ? "+" : ""}${r.aprChange.toFixed(2)} pp`}
                       </td>
                       <td
-                        className={
-                          r.allocationChange !== null && r.allocationChange > 10
-                            ? "negative"
-                            : ""
-                        }
+                        className={`extra-metric ${r.allocationChange !== null && r.allocationChange > 10 ? "negative" : ""}`}
                       >
                         {r.allocationChange === null
                           ? "—"
@@ -1072,30 +1266,41 @@ function Stat({
 function Opportunities({
   rows,
   open,
+  allocationSettings,
 }: {
   rows: MarketRow[];
   open: (r: MarketRow, p?: Page) => void;
+  allocationSettings: AllocationSettings;
 }) {
-  const fresh = (r: MarketRow) => isFresh(r.snapshot);
+  const estimates = new Map(
+    rows.map((r) => [r.snapshot.id, comparison(r, allocationSettings)]),
+  );
   const ranked = rows
-    .filter(
-      (r) =>
-        r.snapshot.active &&
-        fresh(r) &&
-        r.forecast.basis === "history" &&
-        r.forecast.stressedPer1000 !== null,
-    )
-    .sort((a, b) => b.forecast.stressedPer1000! - a.forecast.stressedPer1000!);
+    .filter((r) => estimates.get(r.snapshot.id)!.basis === "history")
+    .sort((a, b) =>
+      compareEarnings(
+        estimates.get(a.snapshot.id)!,
+        estimates.get(b.snapshot.id)!,
+        "stress",
+      ),
+    );
   const baseline = rows
-    .filter(
-      (r) =>
-        r.snapshot.active && fresh(r) && r.forecast.expectedPer1000 !== null,
+    .filter((r) => estimates.get(r.snapshot.id)!.basis === "baseline")
+    .sort((a, b) =>
+      compareEarnings(
+        estimates.get(a.snapshot.id)!,
+        estimates.get(b.snapshot.id)!,
+        "earnings",
+      ),
     )
-    .sort((a, b) => b.forecast.expectedPer1000! - a.forecast.expectedPer1000!)
     .slice(0, 10);
   const list = ranked.length ? ranked.slice(0, 20) : baseline;
   return (
     <>
+      <AllocationSize
+        value={allocationSettings.power}
+        onChange={allocationSettings.setPower}
+      />
       <div className="notice warning">
         <b>
           {ranked.length
@@ -1103,7 +1308,7 @@ function Opportunities({
             : "Insufficient history for persistence ranking."}
         </b>{" "}
         {ranked.length
-          ? "Candidates are ordered by earnings per 1,000 power after a 50% fee decline and 50% more competing allocation. This is a stress assumption, not a confidence interval."
+          ? "Candidates are ordered by earnings for the selected power after a 50% fee decline and 50% more competing allocation. This is a stress assumption, not a confidence interval."
           : "The comparison below holds current allocation and eligible fees constant. It is a baseline scenario, not evidence that these APRs will persist."}
       </div>
       <div className="panel">
@@ -1115,8 +1320,10 @@ function Opportunities({
                 : "Baseline comparisons"}
             </h2>
             <p>
-              Reference allocation: 1,000 additional power. Own dilution
-              included.
+              {allocationSettings.power.trim() === ""
+                ? "Reference: 1,000 additional power."
+                : `Intended total: ${number(Number(allocationSettings.power))} power per pool.`}{" "}
+              Own dilution included.
             </p>
           </div>
           <Badge tone={ranked.length ? "good" : "warn"}>
@@ -1126,17 +1333,23 @@ function Opportunities({
         <div className="candidate-list">
           {list.map((r, i) => (
             <div className="candidate" key={r.snapshot.id}>
-              <span className="rank">
-                {ranked.length ? String(i + 1).padStart(2, "0") : "—"}
-              </span>
+              {ranked.length > 0 && (
+                <span className="rank">{String(i + 1).padStart(2, "0")}</span>
+              )}
               <Pair s={r.snapshot} />
               <div>
-                <span className="small-label">Baseline / 48h</span>
-                <strong>{money(r.forecast.expectedPer1000)}</strong>
+                <span className="small-label">
+                  {ranked.length ? "Estimate / 48h" : "Baseline / 48h"}
+                </span>
+                <strong>
+                  {earningsMoney(estimates.get(r.snapshot.id)!.earnings)}
+                </strong>
               </div>
               <div>
                 <span className="small-label">Stress / 48h</span>
-                <strong>{money(r.forecast.stressedPer1000)}</strong>
+                <strong>
+                  {earningsMoney(estimates.get(r.snapshot.id)!.stress)}
+                </strong>
               </div>
               <div className="candidate-note">
                 {
@@ -1158,7 +1371,9 @@ function Opportunities({
           ))}
           {!list.length && (
             <div className="empty compact">
-              No fresh candidates have complete priced estimates.
+              No comparable candidates yet. Full fee windows, current
+              observations and complete prices are needed. Explore partial
+              observations in Markets.
             </div>
           )}
         </div>
@@ -1554,10 +1769,12 @@ function Simulator({
   row,
   rows,
   select,
+  allocationSettings,
 }: {
   row: MarketRow;
   rows: MarketRow[];
   select: (s: string) => void;
+  allocationSettings: AllocationSettings;
 }) {
   const [fields, setFields] = useLocal<Record<string, string>>("gc-simulator", {
     power: "1000",
@@ -1567,14 +1784,21 @@ function Simulator({
     activationDelayHours: "0",
   });
   const input: SimulationInput = {
-    power: Number(fields.power),
-    existingPower: Number(fields.existingPower),
+    power:
+      allocationSettings.power.trim() === ""
+        ? 1000
+        : Number(allocationSettings.power),
+    existingPower:
+      allocationSettings.power.trim() === ""
+        ? 0
+        : Number(allocationSettings.existing[positionKey(row.snapshot)] ?? "0"),
     stakeValueUsd:
       fields.stakeValueUsd === "" ? null : Number(fields.stakeValueUsd),
     remainingDays:
       fields.remainingDays === "" ? null : Number(fields.remainingDays),
     activationDelayHours: Number(fields.activationDelayHours),
   };
+  const marketEstimate = comparison(row, allocationSettings);
   const outputs = SCENARIOS.map((s) => ({
     ...s,
     ...simulate(row.snapshot, row.forecast.projectedFees, input, s),
@@ -1589,8 +1813,24 @@ function Simulator({
         <section className="panel simulator-inputs">
           <h2>Your allocation</h2>
           <p>
-            Enter allocation power, not dollars. No wallet or address needed.
+            Power is shared with Markets and Opportunities. Existing allocation
+            is saved separately for each pool.
           </p>
+          {allocationSettings.power.trim() === "" && (
+            <p className="simulation-reference">
+              Reference scenario: 1,000 additional power. Enter your intended
+              total to use existing allocation.
+            </p>
+          )}
+          {fields.existingPower &&
+            fields.existingPower !== "0" &&
+            allocationSettings.existing[positionKey(row.snapshot)] ===
+              undefined && (
+              <p className="simulation-reference">
+                Re-enter any existing power for this pool. The previous shared
+                value is no longer applied across pools.
+              </p>
+            )}
           {[
             [
               "power",
@@ -1625,10 +1865,30 @@ function Simulator({
                 min="0"
                 step="any"
                 max={key === "activationDelayHours" ? 48 : undefined}
-                value={fields[key]}
-                onChange={(e) =>
-                  setFields({ ...fields, [key]: e.target.value })
+                placeholder={key === "power" ? "1,000 reference" : undefined}
+                disabled={
+                  key === "existingPower" &&
+                  allocationSettings.power.trim() === ""
                 }
+                value={
+                  key === "power"
+                    ? allocationSettings.power
+                    : key === "existingPower"
+                      ? (allocationSettings.existing[
+                          positionKey(row.snapshot)
+                        ] ?? "0")
+                      : fields[key]
+                }
+                onChange={(e) => {
+                  if (key === "power")
+                    allocationSettings.setPower(e.target.value);
+                  else if (key === "existingPower")
+                    allocationSettings.setExisting({
+                      ...allocationSettings.existing,
+                      [positionKey(row.snapshot)]: e.target.value,
+                    });
+                  else setFields({ ...fields, [key]: e.target.value });
+                }}
               />
               <small>{help}</small>
             </label>
@@ -1644,12 +1904,26 @@ function Simulator({
               <Badge tone="warn">Hypothetical</Badge>
             </div>
             <div className="earnings">
-              <span>Estimated earnings · next 48 hours</span>
-              <strong>{money(outputs[0].earnings)}</strong>
+              <span>Baseline earnings · next 48 hours</span>
+              <strong>{earningsMoney(outputs[0].earnings)}</strong>
               <p>
                 {outputs[0].error ??
                   `${pct(outputs[0].share === null ? null : outputs[0].share * 100)} initial share after your allocation`}
               </p>
+              {marketEstimate.earnings !== null ? (
+                <p className="market-estimate-note">
+                  Markets estimate:{" "}
+                  <b>{earningsMoney(marketEstimate.earnings)}</b> · uses
+                  projected competing power, immediate allocation and constant
+                  own power. The baseline here uses current competing power and
+                  your timing inputs.
+                </p>
+              ) : (
+                <p className="market-estimate-note">
+                  Markets comparison unavailable: {marketEstimate.reason}. This
+                  simulator remains a hypothetical scenario.
+                </p>
+              )}
             </div>
             <div className="sim-facts">
               <div>
@@ -1708,7 +1982,7 @@ function Simulator({
                           </small>
                         )}
                       </td>
-                      <td className="emphasis">{money(s.earnings)}</td>
+                      <td className="emphasis">{earningsMoney(s.earnings)}</td>
                       <td>{pct(s.apr)}</td>
                       <td className={i === 0 ? "" : "negative"}>
                         {s.earnings === null ||
@@ -1734,6 +2008,11 @@ function Simulator({
               actual program times. Optional stake decay and activation delay
               change your share. The revenue-down scenario halves all USD
               revenue, including incentive token value.
+            </p>
+            <p>
+              Markets and Opportunities use the allocation forecast when history
+              is sufficient. This simulator starts competing power from the
+              current observation, so its baseline can differ.
             </p>
             <p>
               Competition scenarios hold other power constant after the

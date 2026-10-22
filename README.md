@@ -6,6 +6,68 @@ A read-only research workspace for Aero MetaDEX03 predictive allocation, availab
 
 The first live run on October 22, 2026 retrieved **474 allocator pools across seven networks**. These are genuine contract observations. Historical coverage begins when your collector runs; the application does not manufacture earlier history. Counts and price coverage will change.
 
+## How to use Gaugecraft effectively
+
+Use the app to move from **large pool rewards → sustainable revenue → your diluted share → an explicit 48-hour scenario**. A useful research session ends with an explanation of the opportunity and its weak points, rather than just an APR number.
+
+To learn the controls, select **Sample fixtures** in the header. Every figure in that mode is synthetic. Switch back to **Live observations** before researching actual pools.
+
+### A repeatable research routine
+
+1. **Check the evidence is current.** Read **Latest retrieval** and **Data health** before comparing pools. Times are UTC. Expand Data health to inspect each network; a successful read on one network does not establish freshness elsewhere. Observations older than 75 minutes are marked stale and excluded from Opportunities. A configured schedule is not proof that collection succeeded.
+
+2. **Build a shortlist in Markets.** The default sort, **Est. rewards 48h** descending, follows the largest pool totals first. Use **Returns** for revenue comparisons and **All metrics** for allocation, TVL, volume and six-hour changes. Filter by network and star candidates for your browser-local watchlist. Identify a pool by its network and contract address, since identical token pairs can appear in multiple pools. The rewards column is shared revenue for the entire pool; it is not what your allocation would earn.
+
+3. **Inspect the source of the APR in Pool analysis.** Compare eligible fee revenue, scheduled incentives and allocation power together. Read the actual fee-window duration: an eight-hour observation is not a measured 48-hour total, and different window lengths weaken direct comparisons. Check incentive expiration within your intended holding window; the estimate already stops each program at its scheduled end and assumes no renewal. An APR jump with flat revenue and falling allocation can be a denominator change rather than increased revenue. Longer chart ranges reveal only the history actually collected.
+
+4. **Size the idea in Simulator.** Enter the **total allocation power you intend to direct to this pool**, then enter any power of yours already included in its current allocation. For example, moving from 10,000 to 15,000 power means entering **15,000 Allocation power** and **10,000 Already allocated**. Enter your own capital value in USD only if you want a personal capital APR. Optional remaining days models fixed-stake decay; leaving it blank models perpetual power. Activation delay is your timing assumption and does not establish protocol eligibility. Compare baseline earnings with the competing-allocation and revenue-decline scenarios. Inputs carry between pools, so review the existing-power and capital fields whenever you change the selected pool.
+
+5. **Use Opportunities as a screen once history is sufficient.** Until the history gate passes, the list shows baseline comparisons and explicitly says **Insufficient history**. Persistence ranking requires approximately 48 hours of coverage, at least 80 priced fee observations, no gap over 75 minutes and a near-full fee window. Qualified candidates are ranked by stressed earnings for **1,000 additional allocation power**, including own dilution. Re-run Simulator for your intended size; a reference-size ranking need not hold for a much larger allocation.
+
+6. **Review the reasoning, then evaluate it later.** Return to your watchlist and compare fee changes, incentive runway and incoming allocation before revising an assumption. After forecast windows mature, use **Performance** to see whether revenue was overestimated or allocation pressure underestimated. Compare benchmarks only on the displayed matched, complete cohorts. These are observed-data return proxies for a standard reference allocation, not a record of your actual positions or claims. Collection gaps can leave a mature forecast unevaluable; waiting longer does not recreate missing observations.
+
+### Read the estimates in context
+
+| Display                               | What it means                                                                                                                                                       | How to use it                                                                                                                                          |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Est. rewards 48h**                  | Pool-wide revenue estimate, using the observed eligible-fee level and incentives overlapping the next 48 hours. At launch the fee input may cover a shorter period. | Find pools worth inspecting, then check the source window and simulate your share.                                                                     |
+| **Stake APR** in Markets              | Annualized revenue relative to allocation power valued at the AERO spot estimate.                                                                                   | A headline comparison using that denominator; do not treat it as your personal capital APR.                                                            |
+| **Personal capital APR** in Simulator | Annualized scenario earnings divided by the stake value in USD you entered.                                                                                         | Compare with its underlying 48-hour USD earnings. It is an annualization, without compounding.                                                         |
+| **Opportunities stress**              | A 50% decline in forecast fees and 50% more competing allocation, on top of the model's projected allocation. Scheduled incentives retain their modeled USD value.  | A declared stress case used for ranking, not a probability or confidence interval.                                                                     |
+| **Simulator scenarios**               | Competing-power shocks start from current other allocation; the revenue-down scenario halves all modeled USD revenue, including incentives.                         | Isolate the effect of dilution or lower revenue at your size. These scenarios do not automatically apply the Opportunities allocation-growth forecast. |
+
+The simulator's **No new competing allocation** case is a baseline assumption, not a prediction that competitors will stay away. Neither ranking nor simulation includes every price move, liquidity change, gas cost or contract-accounting detail. Metric information icons and [SOURCES.md](SOURCES.md) explain the formulas and approximations.
+
+### Worked example: pool rewards versus your earnings
+
+**Illustrative arithmetic only: these invented figures do not describe a live pool.** Assume a pool has 1,000,000 existing allocation power, none of it yours, and $5,000 of modeled revenue paid uniformly over the next 48 hours. You add 10,000 power, with no activation delay or decay.
+
+```text
+Your post-allocation share = 10,000 / (1,000,000 + 10,000) ≈ 0.9901%
+Your baseline earnings    = that share × $5,000 ≈ $49.50 over 48 hours
+```
+
+| Assumption                                                 | Estimated earnings / 48h |
+| ---------------------------------------------------------- | -----------------------: |
+| No new competing allocation                                |                   $49.50 |
+| 25% more competing allocation                              |                   $39.68 |
+| 50% more competing allocation                              |                   $33.11 |
+| 100% more competing allocation                             |                   $24.88 |
+| 50% less total USD revenue, unchanged competing allocation |                   $24.75 |
+
+This is why the largest pool reward total or highest headline APR may not produce the largest earnings for your allocation. Actual incentive timing, stake decay and activation delay require the time-dependent calculation used by the app.
+
+### Common states and mistakes
+
+| What you see                 | Interpretation and next step                                                                                                                                                                                                                                                                                            |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Insufficient history**     | The persistence model has not met its data gate. Inspect baseline scenarios and collect more complete observations; do not read the absence of a ranking as a negative pool score.                                                                                                                                      |
+| **—**                        | A required input, price or comparison is unavailable. Check pool warnings and methodology; do not substitute zero.                                                                                                                                                                                                      |
+| **Stale observations**       | Current comparison evidence is too old. Check Data health and the [collector workflow](https://github.com/provatidis/gaugecraft/actions/workflows/pages.yml). The refresh button reloads the last published data; it does not run collection. Repository maintainers can use **Run workflow** to collect and republish. |
+| **No evaluated returns yet** | The 48-hour horizon has not closed, or the required observations are incomplete. Performance cannot assess forecast accuracy from pending predictions.                                                                                                                                                                  |
+
+Do not sum eligible-fee or volume values across CSV rows: their trailing windows overlap. Export observations to preserve timestamps and source-window boundaries for your own analysis. Hosted charts and CSV contain up to 30 days; full retained history is in the collector database. Watchlists and simulator inputs stay in this browser; the app does not track your actual stake positions or execute reallocations.
+
 ## Run locally
 
 Requires **Node.js 24 or newer** (for built-in SQLite). No account, wallet, API key or paid service is required.
@@ -47,16 +109,6 @@ python3 -m http.server 4318 --directory dist --bind 127.0.0.1
 ```
 
 Relative asset URLs support the repository subpath and an inherited user-site domain. `pnpm build` without `VITE_DATA_MODE` still builds the local server version. Public hosting has GitHub's ordinary access logging; Gaugecraft adds no telemetry.
-
-## Daily workflow
-
-1. **Markets** starts with estimated total pool rewards descending. Search token symbols, network or pool address; use **Returns** for the main revenue comparison or **All metrics** for TVL, volume and changes; sort any visible column; add pools to your local watchlist. Pool names stay pinned while you scroll. The pool total is shared by every allocator.
-2. **Pool analysis** shows actual UTC source windows, block identity, six charts, incentive schedules and descriptive alerts. Chart ranges are 24h, 48h, 7d and 30d; longer ranges do not invent missing samples.
-3. **Simulator** accepts allocation power and optional stake value in USD. Enter any power you already have in that pool to avoid counting it twice. Optional fixed-stake decay and activation delay affect the earnings integral. Inputs remain in this browser's local storage.
-4. **Opportunities** shows baseline comparisons until a pool passes the history gate. Once eligible, it orders candidates by stressed earnings per 1,000 additional power. These assumptions are transparent and deliberately uncalibrated.
-5. **Performance** evaluates frozen forecasts after 48 hours, only with sufficient observations. Revenue and return results are explicitly reconstruction proxies, not realized wallet claims. Benchmarks use selections saved at prediction time and matched complete cohorts.
-
-Hover metric information icons for definitions. Missing values are `—`, never silently zero. Stale pools are marked and excluded from opportunity candidates. Refresh reloads the latest observations, charts and forecast evaluations while preserving table filters. It does not trigger an unbounded RPC collection. **Data health** shows freshness and the latest collection result for every configured network; one successful network cannot hide older observations on another.
 
 ## Data and configuration
 

@@ -25,7 +25,8 @@
     "storage:migrate": "node --import tsx server/storage-cli.ts migrate",
     "storage:backup": "node --import tsx server/storage-cli.ts backup",
     "storage:restore": "node --import tsx server/storage-cli.ts restore",
-    "backup:r2": "node --env-file-if-exists=.env --import tsx server/object-backup-cli.ts"
+    "backup:r2": "node --env-file-if-exists=.env --import tsx server/object-backup-cli.ts",
+    "backup:github": "node --env-file-if-exists=.env --import tsx server/release-backup-cli.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1155.0",

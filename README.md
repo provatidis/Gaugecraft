@@ -106,6 +106,10 @@ GAUGECRAFT_DB=data/gaugecraft-v3.sqlite pnpm dev
 
 Keep the original file for rollback. Migration does not install a system service, change another repository, create a paid account, or start remote collection. See the deployment guide for what remains to be provisioned and validated.
 
+## Independent R2 backups
+
+[Set up the private R2 backup workflow](DEPLOYMENT.md#r2-backups-while-the-collector-remains-on-github) to protect the current public history without waiting for a new collector host. Daily and manual runs restore the latest GitHub release, verify the upload, download it from R2 and compare every restored research record. Each successful run publishes a recovery report. Four repository secrets are required; no keys enter the frontend.
+
 ## GitHub Pages
 
 The repository includes `.github/workflows/pages.yml`. Enable **Settings → Pages → Source → GitHub Actions**. Push to `main` or select **Actions → Collect and publish Gaugecraft → Run workflow** to publish. No paid service or manually supplied secret is required: the workflow uses GitHub's repository-scoped token and the configured public RPCs.

@@ -46,6 +46,7 @@ export function r2Storage(): ObjectStorage {
       secretAccessKey: R2_SECRET_ACCESS_KEY,
     },
     maxAttempts: 3,
+    requestHandler: { connectionTimeout: 10000, socketTimeout: 120000 },
   });
   return {
     async put(key, file) {
@@ -89,7 +90,7 @@ async function verifyRemote(
   if (bytes !== size || hash.digest("hex") !== sha256)
     throw new Error("External backup verification failed");
 }
-async function uploadVerified(
+export async function uploadVerified(
   storage: ObjectStorage,
   key: string,
   file: string,

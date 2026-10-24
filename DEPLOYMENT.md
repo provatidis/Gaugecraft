@@ -61,6 +61,30 @@ The code has a 25-second graceful-shutdown deadline. Configure Railway's deploym
 
 The public API accepts GET/HEAD only, validates pool IDs, caches expensive views briefly, limits charts and HTTP CSV to 30 days, and streams CSV. Command-line CSV can stream full retained history. Personal simulator inputs never enter these requests.
 
+## R2 backups while the collector remains on GitHub
+
+The independent **Back up Gaugecraft to R2** workflow reads the latest complete `collector-state` release asset. It never substitutes the local measurement database, starts a collector, or creates empty history. The workflow uses the same concurrency lock as collection, checks GitHub's published SHA-256 and size, uploads a new private R2 generation, then downloads and restores it into a separate database. Success requires matching counts and canonical fingerprints for every observation, full frozen forecast, run and benchmark decision. A verified `recovery.json` receipt is uploaded only after that round trip succeeds.
+
+Cloudflare setup:
+
+1. Enable R2 if needed and create a **private Standard** bucket, for example `gaugecraft-backups`. Leave public access disabled; no public domain or CORS policy is needed.
+2. Under **R2 → Manage API tokens**, create an S3 API token with **Object Read & Write**, restricted to that bucket. Use the generated Access Key ID and Secret Access Key, not the Cloudflare API token string.
+3. Add four **repository secrets** under [Gaugecraft → Settings → Secrets and variables → Actions](https://github.com/provatidis/gaugecraft/settings/secrets/actions): `R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`. The endpoint is the bucket's HTTPS S3 account endpoint, normally `https://<account-id>.r2.cloudflarestorage.com`. Never add these as frontend variables or paste the keys into chat.
+4. Open [Back up Gaugecraft to R2](https://github.com/provatidis/gaugecraft/actions/workflows/backup.yml), select **Run workflow**, keep branch `main`, and run it. Missing credentials or an unavailable source cause a visible failed run, never a simulated success.
+5. Check the job summary and download the `r2-recovery-report-…` artifact. Confirm `recordsMatch: true` and `restoredFromRemote: true`, with the expected source timestamps and counts. The private generation contains `database.sqlite.gz`, `evidence.ndjson.gz`, `manifest.json` and `recovery.json`.
+
+The workflow is scheduled daily at **03:23 UTC**, with manual runs available, and also verifies a real backup after changes to the backup workflow or its implementation. GitHub can delay or skip scheduled runs; this is a best-effort daily backup, not a guaranteed 24-hour recovery point. Check successful runs and their source timestamps. GitHub failure notifications depend on the repository owner's notification settings. Backup verification does not establish fresh collection and does not repair missing observations.
+
+The workflow only needs read access to repository contents. R2 credentials are supplied to the backup step, not the website build, and are never included in the report. No existing R2 generation is overwritten or automatically deleted. After the first real recovery succeeds, consider a 30-day lifecycle on `backups/`; account usage and any existing R2 storage share the free allowance. Configure billing notifications in Cloudflare and review actual usage before relying on a cost estimate. [R2 authentication](https://developers.cloudflare.com/r2/api/tokens/), [pricing](https://developers.cloudflare.com/r2/pricing/), [GitHub repository secrets](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets).
+
+The same verified command can run locally with those environment settings:
+
+```sh
+GITHUB_REPOSITORY=provatidis/gaugecraft pnpm backup:github
+```
+
+This is configuration and testable tooling. The first real R2 backup is complete only after an actual workflow run returns a verified recovery report. It does not require Railway or another application host.
+
 ## R2 and independent backups
 
 Create a **private** R2 bucket dedicated to Gaugecraft. Keep database/archive objects private; no public bucket URL is needed. Supply a bucket-scoped access key in the deployment's secret store, never in Git, frontend build variables or chat text:

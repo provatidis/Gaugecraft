@@ -1,0 +1,52 @@
+name: Back up Gaugecraft to R2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/backup.yml
+      - server/release-backup.ts
+      - server/release-backup-cli.ts
+      - server/object-backup.ts
+      - server/storage-maintenance.ts
+  workflow_dispatch:
+  schedule:
+    - cron: "23 3 * * *"
+
+# Share the collector's lock so the release cannot be replaced or pruned during download.
+concurrency:
+  group: gaugecraft-pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+      - name: Install pinned dependencies
+        run: |
+          npm install --global pnpm@11.25.0
+          pnpm install --frozen-lockfile
+      - name: Back up authoritative history and verify a complete R2 restore
+        run: pnpm backup:github
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      - name: Preserve recovery verification report
+        uses: actions/upload-artifact@v4
+        with:
+          name: r2-recovery-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: data/r2-backup-report.json
+          if-no-files-found: error
+          retention-days: 30

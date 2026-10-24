@@ -1,6 +1,6 @@
 # Persistent hosting and storage
 
-Status: deployment configuration and migration tooling are provided. A Railway service, R2 bucket, external monitors and the 48-hour operational observation period must be provisioned and verified before declaring the hosted migration complete. Until the repository hosting variables are deliberately changed, GitHub Actions remains the public collector.
+Status: compact storage is in use, and a real R2 backup and complete recovery were verified on October 24, 2026. The independent daily GitHub backup workflow is configured. A replacement persistent collector host, external monitors and the 48-hour operational observation period remain outstanding; Railway provisioning is deferred. GitHub Actions remains the public collector.
 
 ## Storage contract
 
@@ -83,7 +83,20 @@ The same verified command can run locally with those environment settings:
 GITHUB_REPOSITORY=provatidis/gaugecraft pnpm backup:github
 ```
 
-This is configuration and testable tooling. The first real R2 backup is complete only after an actual workflow run returns a verified recovery report. It does not require Railway or another application host.
+### First verified R2 recovery
+
+[Run 40094105394](https://github.com/provatidis/gaugecraft/actions/runs/40094105394) succeeded on **October 24, 2026 at 12:31:14 UTC**, using the authoritative `gaugecraft-40094105368-1.sqlite.gz` release asset. Its latest live source observation was **12:30:05 UTC**. The actual R2 download and separate database restoration matched all source fingerprints:
+
+| Record group             |  Count |
+| ------------------------ | -----: |
+| Live observations        | 14,132 |
+| Live frozen forecasts    | 14,132 |
+| Fixture observations     |  1,685 |
+| Fixture frozen forecasts |  1,685 |
+| Collection runs          |    248 |
+| Benchmark decisions      |    367 |
+
+The R2 generation is `backups/2026-10-24T12-30-52.804Z-UlOfRq`; its `recovery.json` contains the full source and restored hashes. A [GitHub recovery report artifact](https://github.com/provatidis/gaugecraft/actions/runs/40094105394/artifacts/12559834037) provides the same verification evidence and expires after 30 days. This records one successful real recovery, not evidence that future schedules or collection are uninterrupted. The R2 setup does not require Railway or another application host.
 
 ## R2 and independent backups
 

@@ -108,7 +108,7 @@ Keep the original file for rollback. Migration does not install a system service
 
 ## Independent R2 backups
 
-[Set up the private R2 backup workflow](DEPLOYMENT.md#r2-backups-while-the-collector-remains-on-github) to protect the current public history without waiting for a new collector host. Daily and manual runs restore the latest GitHub release, verify the upload, download it from R2 and compare every restored research record. Each successful run publishes a recovery report. Four repository secrets are required; no keys enter the frontend.
+[Set up the private R2 backup workflow](DEPLOYMENT.md#r2-backups-while-the-collector-remains-on-github) to protect the current public history without waiting for a new collector host. Daily and manual runs restore the latest GitHub release, verify the upload, download it from R2 and compare every restored research record. Each successful run publishes a recovery report. The [first real recovery passed on October 24, 2026](https://github.com/provatidis/gaugecraft/actions/runs/40094105394). Four repository secrets are required; no keys enter the frontend.
 
 ## GitHub Pages
 
